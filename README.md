@@ -199,9 +199,12 @@ DungeonScene（场景编排）
   `BattleCharacter2D`。
 - `scripts/ui/character_viewer_2d.gd` + `scenes/character_viewer.tscn`：
   独立角色素材查看器，可切换立绘、lxq 当前角色真实待机动画和行走动画源。
+- `scripts/ui/player_appearance_switcher.gd`：战斗场景内的玩家外观测试面板，
+  下拉列表替换玩家外观并自动载入所选角色的待机动画。
 - `scripts/ui/dialogue_panel.gd`：通用对话 UI，只读取 `DialogueData` 并回传选项动作。
 - `tests/test_scene.gd`：RPG 场景与互动物继承体系的无界面自动化测试。
 - `tests/test_battle.gd`：无界面自动化测试。
+- `tests/test_battle_appearance.gd`：战斗场景玩家外观替换与待机动画自动加载测试。
 - `tests/test_character_viewer.gd`：角色查看器与 SpriteFrames 的无界面自动化测试。
 - `tests/test_dungeon.gd`：六边形网格、骰子、秘境规则、棋盘与场景流程测试。
 
@@ -214,6 +217,11 @@ DungeonScene（场景编排）
 `EnemyBattleCharacter2D`。需要直接用图片替换时，可在角色视觉对象上调用
 `set_appearance_texture(texture, size)`，或在 `BattleScene2D` 子类中覆写
 `_create_character_visual()` 返回自定义角色视觉对象。
+
+调试时可以直接在战斗界面顶部使用玩家外观下拉列表：列表包含默认外观与
+`CharacterRegistry` 登记的角色，缺少待机素材的角色会置灰。选择后
+`BattleScene2D.set_player_appearance()` 会重建玩家视觉，并自动从头播放所选
+角色的待机动画；传回 `PLAYER_APPEARANCE_DEFAULT(-1)` 即可恢复默认外观。
 
 ## 角色素材目录
 

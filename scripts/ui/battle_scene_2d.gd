@@ -19,6 +19,15 @@ const PlayerBattleCharacter2DScript := preload(
 const EnemyBattleCharacter2DScript := preload(
 	"res://scripts/ui/enemy_battle_character_2d.gd"
 )
+const AssetBattleCharacter2DScript := preload(
+	"res://scripts/ui/asset_battle_character_2d.gd"
+)
+const PlayerAppearanceSwitcherScript := preload(
+	"res://scripts/ui/player_appearance_switcher.gd"
+)
+const CharacterRegistryScript := preload(
+	"res://scripts/core/character_registry.gd"
+)
 
 # --------------------------------------------------------------------------
 # 配色
@@ -55,6 +64,11 @@ const RESULT_PANEL_SIZE := Vector2(540.0, 186.0)
 const UI_MARGIN := 22.0
 const ENEMY_FIELD_CENTER := Vector2(0.21, 0.60)
 const PLAYER_FIELD_CENTER := Vector2(0.72, 0.60)
+## 玩家外观测试面板（基准分辨率下的尺寸与顶部位置）。
+const APPEARANCE_PANEL_SIZE := Vector2(404.0, 92.0)
+const APPEARANCE_PANEL_TOP := 134.0
+## 玩家外观默认值：-1 使用 PlayerBattleCharacter2D 的程序化外观。
+const PLAYER_APPEARANCE_DEFAULT := -1
 
 ## 画面缩放：HUD 与字体统一按该系数缩小。
 const UI_SCALE := 0.82
@@ -133,6 +147,10 @@ var _qte_hide_at := 0.0
 var _scene_flow: Node = null
 var _pulse := 0.0
 var _character_visuals: Dictionary = {}
+
+# 玩家外观测试：当前选中的 CharacterRegistry 角色 id。
+var player_appearance_id := PLAYER_APPEARANCE_DEFAULT
+var _appearance_switcher: PlayerAppearanceSwitcher
 
 
 func _ready() -> void:
@@ -475,6 +493,8 @@ func _create_character_visual(
 	accent: Color,
 	is_player: bool
 ) -> BattleCharacter2D:
+	if is_player and player_appearance_id != PLAYER_APPEARANCE_DEFAULT:
+		return _create_appearance_visual(unit, accent)
 	var visual: BattleCharacter2D
 	if is_player:
 		visual = PlayerBattleCharacter2DScript.new()
@@ -483,6 +503,56 @@ func _create_character_visual(
 	visual.display_scale = UNIT_SCALE
 	visual.setup(unit, accent, is_player)
 	return visual
+
+
+## 按 CharacterRegistry 中的角色素材创建玩家外观。
+##
+## AssetBattleCharacter2D 会读取该角色目录下的待机 SpriteFrames，因此新视觉
+## 建立后由 BattleCharacter2D 自动播放所选角色的待机动画。
+func _create_appearance_visual(
+	unit: BattleUnit,
+	accent: Color
+) -> BattleCharacter2D:
+	var visual: BattleCharacter2D = AssetBattleCharacter2DScript.new()
+	visual.display_scale = UNIT_SCALE
+	visual.setup_character(player_appearance_id, unit, accent, true)
+	return visual
+
+
+## 切换玩家外观（外观测试用）。
+##
+## character_id 取 CharacterRegistry 登记的角色 id；传入
+## PLAYER_APPEARANCE_DEFAULT(-1) 恢复默认程序化外观。切换后玩家视觉会被
+## 重建，所选角色的待机动画自动载入并从头播放。
+func set_player_appearance(character_id: int) -> bool:
+	if (
+		character_id != PLAYER_APPEARANCE_DEFAULT
+		and not CharacterRegistryScript.has_character(character_id)
+	):
+		return false
+	player_appearance_id = character_id
+	_drop_player_visuals()
+	if _appearance_switcher != null:
+		_appearance_switcher.select_appearance(character_id)
+	queue_redraw()
+	return true
+
+
+## 返回玩家当前使用的外观 id（PLAYER_APPEARANCE_DEFAULT 为默认外观）。
+func get_player_appearance_id() -> int:
+	return player_appearance_id
+
+
+## 丢弃玩家视觉缓存，让下一次绘制按当前外观重建。
+func _drop_player_visuals() -> void:
+	if engine == null:
+		return
+	for unit in engine.player_units:
+		_character_visuals.erase(unit)
+
+
+func _on_player_appearance_selected(character_id: int) -> void:
+	set_player_appearance(character_id)
 
 
 func _draw_target_marker(origin: Vector2) -> void:
@@ -537,6 +607,17 @@ func _build_hud() -> void:
 	add_child(_dim_overlay)
 
 	_result_panel = _build_result_panel()
+	_appearance_switcher = _build_appearance_switcher()
+
+
+## 玩家外观测试面板：下拉列表切换玩家外观，替换后自动载入所选待机动画。
+func _build_appearance_switcher() -> PlayerAppearanceSwitcher:
+	var switcher := PlayerAppearanceSwitcherScript.new() as PlayerAppearanceSwitcher
+	switcher.name = "PlayerAppearanceSwitcher"
+	switcher.appearance_selected.connect(_on_player_appearance_selected)
+	add_child(switcher)
+	switcher.select_appearance(player_appearance_id)
+	return switcher
 
 
 func _build_enemy_plate() -> void:
@@ -973,6 +1054,15 @@ func _layout_hud() -> void:
 	)
 	_result_panel.size = _sv(RESULT_PANEL_SIZE)
 	_result_panel.position = (canvas - _sv(RESULT_PANEL_SIZE)) * 0.5
+
+	# 顶部居中：玩家外观测试面板，位于顶部两块状态板下方
+	if _appearance_switcher != null:
+		var switcher_size := _sv(APPEARANCE_PANEL_SIZE)
+		_appearance_switcher.size = switcher_size
+		_appearance_switcher.position = Vector2(
+			(canvas.x - switcher_size.x) * 0.5,
+			_s(APPEARANCE_PANEL_TOP)
+		)
 
 	_layout_battle_labels()
 
