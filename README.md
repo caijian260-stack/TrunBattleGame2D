@@ -143,10 +143,11 @@ DungeonScene（场景编排）
 
 用 Godot 4.7 打开本项目并运行主场景 `res://scenes/main.tscn`。项目采用 GL Compatibility 渲染方式。
 
-战斗场景内部固定按 1600x900 设计分辨率排版，再由
-`BattleScene2D._fit_to_viewport()` 在窗口尺寸变化时整体等比缩放到实际窗口。
-因此 1152x648 等小窗口下 HUD 与角色会一起缩小，不会互相重叠；宽高比不同
-时由设计区在较宽松的一边多出空间，不产生黑边。
+界面固定按 1600x900 设计分辨率排版，缩放交给引擎的
+`display/window/stretch/mode="canvas_items"`（见 `project.godot`）。因此
+1152x648 等小窗口下 HUD 与角色会一起缩小、不会互相重叠，且字体按最终窗口
+尺寸重新栅格化而保持清晰。界面字体为霞鹜文楷，通过 `gui/theme/custom_font`
+全局启用，详见 `assets/fonts/README.md`。
 
 查看角色立绘与动画时，可直接运行独立调试场景：
 
@@ -207,6 +208,7 @@ DungeonScene（场景编排）
 - `scripts/ui/player_appearance_switcher.gd`：战斗场景内的玩家外观测试面板，
   下拉列表替换玩家外观并自动载入所选角色的待机动画。
 - `scripts/ui/dialogue_panel.gd`：通用对话 UI，只读取 `DialogueData` 并回传选项动作。
+- `assets/fonts/`：界面古风字体（霞鹜文楷）与替换说明。
 - `tests/test_scene.gd`：RPG 场景与互动物继承体系的无界面自动化测试。
 - `tests/test_battle.gd`：无界面自动化测试。
 - `tests/test_battle_appearance.gd`：战斗场景玩家外观替换与待机动画自动加载测试。
