@@ -15,13 +15,25 @@ const CharacterRegistryScript := preload(
 ## 玩家选择外观时发出，携带 CharacterRegistry 的角色 id；-1 表示默认外观。
 signal appearance_selected(character_id: int)
 
+## 玩家修改显示尺寸时发出，携带玩家外观的显示高度（像素）。
+signal appearance_size_selected(height_px: float)
+
 ## 默认外观沿用 PlayerBattleCharacter2D 的程序化绘制。
 const DEFAULT_CHARACTER_ID := -1
 const DEFAULT_OPTION_LABEL := "默认外观"
 ## 缺少待机动画素材的角色在下拉列表中显示为不可选。
 const MISSING_SUFFIX := "（无待机素材）"
+## 尺寸输入的取值范围与初始值（像素，指显示高度）。
+const SIZE_MIN := 40.0
+const SIZE_MAX := 1200.0
+const SIZE_STEP := 2.0
+const SIZE_FALLBACK := 150.0
+## 两行标签同宽，保证输入控件左对齐。
+const CAPTION_WIDTH := 62.0
 
 var _option: OptionButton
+var _size_input: SpinBox
+var _size_label: Label
 var _status: Label
 var _entries: Array[Dictionary] = []
 
@@ -50,6 +62,31 @@ func select_appearance(character_id: int) -> bool:
 		_sync_status(character_id)
 		return true
 	return false
+
+
+## 由战斗场景推送当前外观尺寸：源素材尺寸与实际显示尺寸。
+##
+## 显示高度会在用户正在输入时保持不变，避免每帧覆盖输入框内容。
+func set_visual_size(source_size: Vector2, display_size: Vector2) -> void:
+	var ready := source_size.x > 0.0 and source_size.y > 0.0
+	if _size_label != null:
+		if ready:
+			_size_label.text = "源 %d × %d → %d × %d" % [
+				roundi(source_size.x),
+				roundi(source_size.y),
+				roundi(display_size.x),
+				roundi(display_size.y),
+			]
+		else:
+			_size_label.text = "外观尺寸未就绪"
+	if _size_input == null:
+		return
+	if _size_input.get_line_edit().has_focus():
+		return
+	var height := display_size.y if ready else SIZE_FALLBACK
+	_size_input.set_value_no_signal(
+		clampf(roundf(height), SIZE_MIN, SIZE_MAX)
+	)
 
 
 ## 供测试与调试读取下拉列表控件。
@@ -91,12 +128,7 @@ func _build() -> void:
 	row.add_theme_constant_override("separation", 8)
 	column.add_child(row)
 
-	var caption := Label.new()
-	caption.text = "玩家外观"
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption.add_theme_font_size_override("font_size", 14)
-	caption.add_theme_color_override("font_color", Color(0.78, 0.93, 1.0))
-	row.add_child(caption)
+	row.add_child(_make_caption("玩家外观"))
 
 	_option = OptionButton.new()
 	_option.name = "AppearanceOption"
@@ -104,6 +136,35 @@ func _build() -> void:
 	_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_option.item_selected.connect(_on_item_selected)
 	row.add_child(_option)
+
+	var size_row := HBoxContainer.new()
+	size_row.add_theme_constant_override("separation", 8)
+	column.add_child(size_row)
+
+	size_row.add_child(_make_caption("尺寸"))
+
+	_size_input = SpinBox.new()
+	_size_input.name = "AppearanceSizeInput"
+	_size_input.min_value = SIZE_MIN
+	_size_input.max_value = SIZE_MAX
+	_size_input.step = SIZE_STEP
+	_size_input.suffix = " px"
+	_size_input.value = SIZE_FALLBACK
+	_size_input.custom_minimum_size = Vector2(104.0, 32.0)
+	_size_input.tooltip_text = "玩家外观的显示高度（像素）"
+	_size_input.value_changed.connect(_on_size_selected)
+	size_row.add_child(_size_input)
+
+	_size_label = Label.new()
+	_size_label.name = "AppearanceSizeLabel"
+	_size_label.clip_text = true
+	_size_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_size_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_size_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_size_label.add_theme_font_size_override("font_size", 12)
+	_size_label.add_theme_color_override("font_color", Color(0.62, 0.76, 0.84))
+	_size_label.text = "外观尺寸未就绪"
+	size_row.add_child(_size_label)
 
 	_status = Label.new()
 	_status.name = "AppearanceStatus"
@@ -114,6 +175,16 @@ func _build() -> void:
 	_status.add_theme_font_size_override("font_size", 12)
 	_status.add_theme_color_override("font_color", Color(0.62, 0.76, 0.84))
 	column.add_child(_status)
+
+
+func _make_caption(text_value: String) -> Label:
+	var caption := Label.new()
+	caption.text = text_value
+	caption.custom_minimum_size = Vector2(CAPTION_WIDTH, 0.0)
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 14)
+	caption.add_theme_color_override("font_color", Color(0.78, 0.93, 1.0))
+	return caption
 
 
 ## 第一项固定为默认外观，其余按 CharacterRegistry 顺序排列。
@@ -158,6 +229,10 @@ func _on_item_selected(index: int) -> void:
 	var character_id := int(_entries[index]["id"])
 	_sync_status(character_id)
 	appearance_selected.emit(character_id)
+
+
+func _on_size_selected(height_px: float) -> void:
+	appearance_size_selected.emit(height_px)
 
 
 ## 状态行展示所选角色已就绪的待机剪片，方便确认动画是否自动加载。

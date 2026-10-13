@@ -65,10 +65,13 @@ const UI_MARGIN := 22.0
 const ENEMY_FIELD_CENTER := Vector2(0.21, 0.60)
 const PLAYER_FIELD_CENTER := Vector2(0.72, 0.60)
 ## 玩家外观测试面板（基准分辨率下的尺寸与顶部位置）。
-const APPEARANCE_PANEL_SIZE := Vector2(404.0, 92.0)
+const APPEARANCE_PANEL_SIZE := Vector2(470.0, 136.0)
 const APPEARANCE_PANEL_TOP := 134.0
 ## 玩家外观默认值：-1 使用 PlayerBattleCharacter2D 的程序化外观。
 const PLAYER_APPEARANCE_DEFAULT := -1
+## 玩家外观显示高度（像素）的可输入范围。
+const APPEARANCE_HEIGHT_MIN := 40.0
+const APPEARANCE_HEIGHT_MAX := 1200.0
 
 ## 画面缩放：HUD 与字体统一按该系数缩小。
 const UI_SCALE := 0.82
@@ -150,6 +153,8 @@ var _character_visuals: Dictionary = {}
 
 # 玩家外观测试：当前选中的 CharacterRegistry 角色 id。
 var player_appearance_id := PLAYER_APPEARANCE_DEFAULT
+# 玩家外观测试：显示高度（像素）。0 表示按 UNIT_SCALE 统一缩放。
+var player_appearance_height := 0.0
 var _appearance_switcher: PlayerAppearanceSwitcher
 
 
@@ -191,6 +196,7 @@ func _process(delta: float) -> void:
 		for visual in _character_visuals.values():
 			if visual != null:
 				visual.update(delta)
+		_sync_appearance_panel_size()
 		queue_redraw()
 
 
@@ -500,8 +506,8 @@ func _create_character_visual(
 		visual = PlayerBattleCharacter2DScript.new()
 	else:
 		visual = EnemyBattleCharacter2DScript.new()
-	visual.display_scale = UNIT_SCALE
 	visual.setup(unit, accent, is_player)
+	_apply_visual_height(visual)
 	return visual
 
 
@@ -514,9 +520,23 @@ func _create_appearance_visual(
 	accent: Color
 ) -> BattleCharacter2D:
 	var visual: BattleCharacter2D = AssetBattleCharacter2DScript.new()
-	visual.display_scale = UNIT_SCALE
 	visual.setup_character(player_appearance_id, unit, accent, true)
+	_apply_visual_height(visual)
 	return visual
+
+
+## 按 player_appearance_height 决定视觉缩放；未设置尺寸时沿用 UNIT_SCALE。
+func _apply_visual_height(visual: BattleCharacter2D) -> void:
+	if visual == null:
+		return
+	if player_appearance_height <= 0.0:
+		visual.display_scale = UNIT_SCALE
+		return
+	var source_height := visual.get_appearance_pixel_size().y
+	if source_height <= 0.0:
+		visual.display_scale = UNIT_SCALE
+		return
+	visual.display_scale = player_appearance_height / source_height
 
 
 ## 切换玩家外观（外观测试用）。
@@ -543,6 +563,42 @@ func get_player_appearance_id() -> int:
 	return player_appearance_id
 
 
+## 设置玩家外观的显示高度（像素）。
+##
+## 传入正数后玩家视觉按“显示高度 / 素材高度”计算缩放，因此切换外观时
+## 屏幕上的角色高矮保持一致；传 0 恢复 UNIT_SCALE 统一缩放。
+func set_player_appearance_height(height_px: float) -> bool:
+	if height_px < 0.0:
+		return false
+	if is_zero_approx(height_px):
+		player_appearance_height = 0.0
+	else:
+		player_appearance_height = clampf(
+			height_px,
+			APPEARANCE_HEIGHT_MIN,
+			APPEARANCE_HEIGHT_MAX
+		)
+	_apply_player_visual_size()
+	_sync_appearance_panel_size()
+	queue_redraw()
+	return true
+
+
+## 返回玩家外观的显示高度（像素），0 表示沿用 UNIT_SCALE。
+func get_player_appearance_height() -> float:
+	return player_appearance_height
+
+
+## 把当前显示高度重新套用到已缓存的玩家视觉上。
+func _apply_player_visual_size() -> void:
+	if engine == null:
+		return
+	for unit in engine.player_units:
+		_apply_visual_height(
+			_character_visuals.get(unit) as BattleCharacter2D
+		)
+
+
 ## 丢弃玩家视觉缓存，让下一次绘制按当前外观重建。
 func _drop_player_visuals() -> void:
 	if engine == null:
@@ -553,6 +609,10 @@ func _drop_player_visuals() -> void:
 
 func _on_player_appearance_selected(character_id: int) -> void:
 	set_player_appearance(character_id)
+
+
+func _on_player_appearance_size_selected(height_px: float) -> void:
+	set_player_appearance_height(height_px)
 
 
 func _draw_target_marker(origin: Vector2) -> void:
@@ -615,9 +675,24 @@ func _build_appearance_switcher() -> PlayerAppearanceSwitcher:
 	var switcher := PlayerAppearanceSwitcherScript.new() as PlayerAppearanceSwitcher
 	switcher.name = "PlayerAppearanceSwitcher"
 	switcher.appearance_selected.connect(_on_player_appearance_selected)
+	switcher.appearance_size_selected.connect(
+		_on_player_appearance_size_selected
+	)
 	add_child(switcher)
 	switcher.select_appearance(player_appearance_id)
 	return switcher
+
+
+## 把玩家外观的源尺寸与显示尺寸推送到测试面板。
+func _sync_appearance_panel_size() -> void:
+	if _appearance_switcher == null or player_unit == null:
+		return
+	var visual := _get_character_visual(player_unit, PLAYER_ACCENT, true)
+	_apply_visual_height(visual)
+	_appearance_switcher.set_visual_size(
+		visual.get_appearance_pixel_size(),
+		visual.get_display_size()
+	)
 
 
 func _build_enemy_plate() -> void:

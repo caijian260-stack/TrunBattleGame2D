@@ -101,6 +101,7 @@ func _test_appearance_switcher() -> void:
 
 	_test_invalid_character(scene)
 	await _test_switch_via_dropdown(scene, switcher, option)
+	await _test_appearance_size(scene, switcher)
 
 	scene.queue_free()
 	await process_frame
@@ -185,6 +186,62 @@ func _test_switch_via_dropdown(
 	_check(
 		restored is PlayerBattleCharacter2DScript,
 		"恢复默认外观后应重新使用 PlayerBattleCharacter2D"
+	)
+
+
+func _test_appearance_size(
+	scene: BattleScene2D,
+	switcher: PlayerAppearanceSwitcher
+) -> void:
+	scene.set_player_appearance(CharacterRegistryScript.CharacterId.LXQ)
+	await process_frame
+
+	var input: SpinBox = switcher._size_input
+	_check(input != null, "外观面板应提供尺寸输入框")
+	if input == null:
+		return
+	var size_label: Label = switcher._size_label
+	_check(size_label != null, "外观面板应提供尺寸显示")
+	if size_label != null:
+		_check(
+			size_label.text.contains("源") and size_label.text.contains("→"),
+			"尺寸显示应同时给出源尺寸与显示尺寸"
+		)
+
+	var target := 320.0
+	input.value = target
+	await process_frame
+	_check(
+		is_equal_approx(scene.get_player_appearance_height(), target),
+		"输入尺寸后战斗场景应记录新的显示高度"
+	)
+	var visual := scene._get_character_visual(
+		scene.player_unit,
+		PLAYER_ACCENT,
+		true
+	)
+	_check(
+		absf(visual.get_display_size().y - target) <= 1.0,
+		"输入尺寸后玩家外观的显示高度应等于输入值"
+	)
+	if size_label != null:
+		_check(
+			size_label.text.contains(str(int(target))),
+			"尺寸显示应随输入同步更新"
+		)
+	_check(
+		is_equal_approx(input.value, target),
+		"尺寸输入框应与当前显示高度保持一致"
+	)
+
+	scene.set_player_appearance_height(0.0)
+	_check(
+		is_zero_approx(scene.get_player_appearance_height()),
+		"传入 0 应恢复 UNIT_SCALE 统一缩放"
+	)
+	_check(
+		visual.display_scale > 0.0,
+		"恢复统一缩放后角色仍应保持可见缩放"
 	)
 
 

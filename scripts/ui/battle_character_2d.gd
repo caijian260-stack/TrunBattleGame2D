@@ -167,6 +167,16 @@ func is_alive() -> bool:
 	return unit != null and unit.hp > 0
 
 
+## 返回当前外观的素材像素尺寸（源尺寸），程序化外观返回其名义尺寸。
+func get_appearance_pixel_size() -> Vector2:
+	return appearance_size
+
+
+## 返回当前外观在战场上的实际像素尺寸。
+func get_display_size() -> Vector2:
+	return appearance_size * display_scale
+
+
 ## 使用指定贴图替换本角色外观。贴图默认以脚底中心对齐角色原点。
 func set_appearance_texture(
 	texture: Texture2D,

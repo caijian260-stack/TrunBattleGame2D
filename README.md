@@ -223,6 +223,11 @@ DungeonScene（场景编排）
 `BattleScene2D.set_player_appearance()` 会重建玩家视觉，并自动从头播放所选
 角色的待机动画；传回 `PLAYER_APPEARANCE_DEFAULT(-1)` 即可恢复默认外观。
 
+“尺寸”一行显示所选外观的源素材尺寸与实际显示尺寸，并可直接输入显示高度
+（像素）。`BattleScene2D.set_player_appearance_height()` 按
+“显示高度 / 素材高度”换算缩放，因此切换外观时屏幕上的角色高矮保持一致；
+传入 0 则恢复 `UNIT_SCALE` 统一缩放。
+
 ## 角色素材目录
 
 每个角色使用 `assets/characters/<角色名>/`，目录名即角色 id。以 `lxq` 为例：
