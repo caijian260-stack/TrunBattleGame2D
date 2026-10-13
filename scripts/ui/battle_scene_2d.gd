@@ -45,8 +45,16 @@ const PLATE_FILL := Color(0.035, 0.07, 0.105, 0.9)
 const PLATE_FILL_SOFT := Color(0.03, 0.055, 0.08, 0.82)
 
 # --------------------------------------------------------------------------
-# 布局（基准分辨率 1600x900，其余分辨率按同样的比例关系排布）
+# 布局（基准分辨率 1600x900）
 # --------------------------------------------------------------------------
+# 整个战斗界面始终按 DESIGN_SIZE 排版，再由 _fit_to_viewport() 等比缩放到
+# 实际窗口，所以 1152x648 等小窗口下 HUD 与角色一起缩小，不会互相重叠。
+# --------------------------------------------------------------------------
+
+## 设计分辨率：所有 HUD 与角色坐标都以该尺寸为基准。
+const DESIGN_SIZE := Vector2(1600.0, 900.0)
+## 设计缩放下限，避免窗口过小时界面小到不可读。
+const DESIGN_FIT_MIN := 0.35
 
 const PLATE_SKEW := 34.0
 const PLATE_MARGIN := Vector2(22.0, 18.0)
@@ -159,9 +167,13 @@ var _appearance_switcher: PlayerAppearanceSwitcher
 
 
 func _ready() -> void:
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	resized.connect(_on_resized)
+	var viewport := get_viewport()
+	if viewport != null:
+		viewport.size_changed.connect(_on_viewport_size_changed)
+	_fit_to_viewport()
 	_load_encounter_context()
 	_build_hud()
 	_setup_battle()
@@ -1186,6 +1198,31 @@ func _on_resized() -> void:
 	if _qte_track != null:
 		_set_qte_progress(_qte_progress())
 	queue_redraw()
+
+
+func _on_viewport_size_changed() -> void:
+	_fit_to_viewport()
+	_on_resized()
+
+
+## 把整个战斗界面等比缩放到窗口。
+##
+## 内部坐标始终按 DESIGN_SIZE 排版，缩放后设计区恰好铺满窗口：宽高比不同时
+## 在设计区较宽松的一边多出空间，HUD 依旧贴边排布，不会出现黑边。
+func _fit_to_viewport() -> void:
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	var window := viewport.get_visible_rect().size
+	if window.x <= 1.0 or window.y <= 1.0:
+		return
+	var fit := maxf(
+		minf(window.x / DESIGN_SIZE.x, window.y / DESIGN_SIZE.y),
+		DESIGN_FIT_MIN
+	)
+	scale = Vector2(fit, fit)
+	size = window / fit
+	position = Vector2.ZERO
 
 
 # --------------------------------------------------------------------------

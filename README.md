@@ -143,6 +143,11 @@ DungeonScene（场景编排）
 
 用 Godot 4.7 打开本项目并运行主场景 `res://scenes/main.tscn`。项目采用 GL Compatibility 渲染方式。
 
+战斗场景内部固定按 1600x900 设计分辨率排版，再由
+`BattleScene2D._fit_to_viewport()` 在窗口尺寸变化时整体等比缩放到实际窗口。
+因此 1152x648 等小窗口下 HUD 与角色会一起缩小，不会互相重叠；宽高比不同
+时由设计区在较宽松的一边多出空间，不产生黑边。
+
 查看角色立绘与动画时，可直接运行独立调试场景：
 
 ```powershell
