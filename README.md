@@ -75,7 +75,7 @@ SceneInteractable
 `SceneFlow` 是 `project.godot` 中注册的自动加载节点，用于保存跨场景临时状态：
 
 1. `RPGScene.enter_battle()` 保存当前场景与遭遇数据（2D 场景不含玩家坐标）。
-2. `battle_ui.gd` 读取 `SceneFlow.encounter_data` 中的遭遇信息。
+2. `battle_scene_2d.gd` 读取 `SceneFlow.encounter_data` 中的遭遇信息。
 3. 战斗结束或逃走后显示“返回场景”按钮。
 4. 返回时通过 `SceneFlow.take_battle_return()` 回到原地图。
 5. 传送门通过 `change_to_scene(path, spawn_id)` 进入目标场景的命名出生点。
@@ -87,8 +87,8 @@ SceneInteractable
 - `scenes/main.tscn`：剑宗山门，入口场景。
 - `scenes/cloud_terrace.tscn`：云台，可从剑宗传送进入。
 - `scenes/mystic_realm.tscn`：副本秘境，可从剑宗秘境入口进入。
-- `scenes/battle.tscn`：复用原战斗 UI，可被任意 RPG 场景启动并返回来源场景。
-- `scenes/battle_2d.tscn`：纯 Control 2D 战斗场景，使用 `BattleScene2D` 父类。
+- `scenes/battle_2d.tscn`：唯一的战斗场景（纯 Control 2D），使用 `BattleScene2D`
+  父类，可被任意 RPG 场景与秘境启动并返回来源场景。
 
 `tests/test_scene.gd` 覆盖场景父类、具体场景、互动物继承、对话动作和跨场景上下文。
 
@@ -116,7 +116,7 @@ DungeonScene（场景编排）
 - `DungeonScene`：只负责按钮、状态栏、事件日志、奖励汇总、战斗跳转和返回恢复。
 
 每层保底生成炼器材料、炼丹材料和法宝机缘事件，其余格子从随机事件池中抽取。
-点击高亮格会沿唯一通道路径移动；遭遇战斗时先保存快照，再进入既有 3D 战斗。
+点击高亮格会沿唯一通道路径移动；遭遇战斗时先保存快照，再进入 2D 战斗场景。
 抵达出口后可深入下一层，层数提高会提升秘境敌人生命与攻击。
 
 ## QTE 系统
@@ -143,6 +143,12 @@ DungeonScene（场景编排）
 
 用 Godot 4.7 打开本项目并运行主场景 `res://scenes/main.tscn`。项目采用 GL Compatibility 渲染方式。
 
+查看角色立绘与动画时，可直接运行独立调试场景：
+
+```powershell
+& 'D:\Godot\editor\Godot.exe' --path 'D:\codex\Godot\TrunBattleGame10122159\TrunBattleGame_3D_01-main' --scene 'res://scenes/character_viewer.tscn'
+```
+
 场景系统与战斗系统可分别运行无界面测试：
 
 ```powershell
@@ -151,6 +157,8 @@ DungeonScene（场景编排）
 & 'D:\Godot\editor\Godot.exe' --headless --path 'D:\codex\Godot\TrunBattleGame_3D_01' --script 'D:\codex\Godot\TrunBattleGame_3D_01\tests\test_battle.gd' --log-file 'D:\codex\Godot\TrunBattleGame_3D_01\.godot\test.log'
 
 & 'D:\Godot\editor\Godot.exe' --headless --path 'D:\codex\Godot\TrunBattleGame_3D_01' --script 'D:\codex\Godot\TrunBattleGame_3D_01\tests\test_dungeon.gd' --log-file 'D:\codex\Godot\TrunBattleGame_3D_01\.godot\test_dungeon.log'
+
+& 'D:\Godot\editor\Godot.exe' --headless --path 'D:\codex\Godot\TrunBattleGame10122159\TrunBattleGame_3D_01-main' --script 'D:\codex\Godot\TrunBattleGame10122159\TrunBattleGame_3D_01-main\tests\test_character_viewer.gd' --log-file 'D:\codex\Godot\TrunBattleGame10122159\TrunBattleGame_3D_01-main\.godot\test_character_viewer.log'
 ```
 
 ## 目录
@@ -180,15 +188,55 @@ DungeonScene（场景编排）
 - `scripts/dungeon/dungeon_maze.gd`：秘境生成、移动、事件、奖励和快照规则。
 - `scripts/dungeon/dungeon_board_view.gd`：六边形棋盘绘制与鼠标输入。
 - `scripts/dungeon/dungeon_scene.gd`：秘境 UI 编排、战斗跳转与返回恢复。
-- `scripts/ui/battle_ui.gd`：3D 战斗场景控制、HUD 与引擎信号连接。
-- `scripts/ui/battle_scene_2d.gd`：2D 战斗场景父类，负责战场绘制、按钮菜单、QTE 和战斗流程。
+- `scripts/ui/battle_scene_2d.gd`：2D 战斗场景父类，负责左右对峙战场绘制、
+  敌人血量横条、指令菜单、QTE 和战斗流程。
 - `scripts/ui/battle_2d_scene.gd`：默认 2D 战斗子类，绑定 `scenes/battle_2d.tscn`。
-- `scripts/ui/battle_unit_visual_3d.gd`：可复用的 3D 单位表现层，只读取通用战斗数据。
-- `scripts/ui/battle_radial_menu.gd`：圆盘行动菜单，负责展示条目并回传稳定 ID。
+- `scripts/ui/battle_character_2d.gd`：2D 战斗角色视觉父类，统一管理待机动画、
+  呼吸浮动、地面阴影、选中光环、死亡姿态与贴图外观。
+- `scripts/ui/player_battle_character_2d.gd`：玩家队伍默认外观，继承
+  `BattleCharacter2D`。
+- `scripts/ui/enemy_battle_character_2d.gd`：敌人默认外观，继承
+  `BattleCharacter2D`。
+- `scripts/ui/character_viewer_2d.gd` + `scenes/character_viewer.tscn`：
+  独立角色素材查看器，可切换立绘、lxq 当前角色真实待机动画和行走动画源。
 - `scripts/ui/dialogue_panel.gd`：通用对话 UI，只读取 `DialogueData` 并回传选项动作。
 - `tests/test_scene.gd`：RPG 场景与互动物继承体系的无界面自动化测试。
 - `tests/test_battle.gd`：无界面自动化测试。
+- `tests/test_character_viewer.gd`：角色查看器与 SpriteFrames 的无界面自动化测试。
 - `tests/test_dungeon.gd`：六边形网格、骰子、秘境规则、棋盘与场景流程测试。
+
+## 扩展角色外观
+
+2D 战斗角色表现全部继承 `BattleCharacter2D`。设置 `idle_frames`（SpriteFrames）
+后，待机会优先播放角色自己的真实待机帧；未设置时才回退到父类待机浮动与呼吸。
+地面阴影和光环由父类统一处理，具体角色只需覆写 `_draw_body()` 与
+`_draw_weapon()`；已有默认实现见 `PlayerBattleCharacter2D` 与
+`EnemyBattleCharacter2D`。需要直接用图片替换时，可在角色视觉对象上调用
+`set_appearance_texture(texture, size)`，或在 `BattleScene2D` 子类中覆写
+`_create_character_visual()` 返回自定义角色视觉对象。
+
+## 角色素材目录
+
+每个角色使用 `assets/characters/<角色名>/`，目录名即角色 id。以 `lxq` 为例：
+
+```text
+assets/characters/lxq/
+├── portrait.png   # 立绘
+├── left.png       # 左视图
+├── right.png      # 右视图
+├── front.png      # 正视图
+├── back.png       # 后视图（可选）
+└── animation/
+    ├── idle/      # 待机动画精灵图
+    └── walk/      # 行走动画精灵图
+```
+
+动画目录按“精灵图集 `sprites.png` + 同目录 `animation.tres`（SpriteFrames）”
+存放：`walk_left` 为行走动画；待机动画包含 `idle_01`（从站立转入待机的
+45 帧过渡，不循环）与 `idle_02`（复用 `idle_01` 最后 0.5 秒的 6 帧，
+按 x → 末帧 → 回到 x 作 11 帧对称循环），均为 12 fps。完整规格见
+`assets/characters/README.md` 与
+`assets/characters/lxq/animation/idle/README.md`。
 
 ## 扩展职业
 

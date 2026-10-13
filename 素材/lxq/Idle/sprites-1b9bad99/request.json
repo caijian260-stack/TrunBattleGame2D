@@ -1,0 +1,21 @@
+{
+  "stage": "sprites",
+  "frames": 16,
+  "columns": 4,
+  "cell_size": [
+    384,
+    512
+  ],
+  "pixel_grid": 1,
+  "transparent": true,
+  "auto_cycle": false,
+  "start_seconds": 0,
+  "end_seconds": 3.2,
+  "animation_name": "walk_left",
+  "sampling": "source",
+  "alignment": "source",
+  "remove_shadows": true,
+  "video": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\imports\\021ba3895f63.mp4",
+  "history": null,
+  "frames_manifest": null
+}

@@ -24,8 +24,8 @@ signal scene_exited(scene: BaseGameScene)
 
 const SceneFlowScript := preload("res://scripts/core/scene_flow.gd")
 
-const DEFAULT_BATTLE_SCENE := "res://scenes/battle.tscn"
-const DEFAULT_BATTLE_SCENE_2D := "res://scenes/battle_2d.tscn"
+## 项目只保留 2D 战斗场景，所有 RPG 场景与秘境都从这里进入战斗。
+const DEFAULT_BATTLE_SCENE := "res://scenes/battle_2d.tscn"
 const DEFAULT_MESSAGE_DURATION := 4.0
 
 @export var scene_id: StringName = &""

@@ -1,0 +1,27 @@
+{"event": "status", "phase": "processing", "message": "正在准备视频抽帧与精灵图转换…", "sequence": 1, "timestamp": "2026-10-13T05:03:08"}
+{"event": "status", "message": "读取视频画面…", "sequence": 2, "timestamp": "2026-10-13T05:03:08"}
+{"event": "progress", "value": 1, "maximum": 90, "message": "去背景并对齐 1 / 90 帧", "sequence": 3, "timestamp": "2026-10-13T05:03:08"}
+{"event": "progress", "value": 5, "maximum": 90, "message": "去背景并对齐 5 / 90 帧", "sequence": 4, "timestamp": "2026-10-13T05:03:09"}
+{"event": "progress", "value": 9, "maximum": 90, "message": "去背景并对齐 9 / 90 帧", "sequence": 5, "timestamp": "2026-10-13T05:03:09"}
+{"event": "progress", "value": 13, "maximum": 90, "message": "去背景并对齐 13 / 90 帧", "sequence": 6, "timestamp": "2026-10-13T05:03:09"}
+{"event": "progress", "value": 17, "maximum": 90, "message": "去背景并对齐 17 / 90 帧", "sequence": 7, "timestamp": "2026-10-13T05:03:09"}
+{"event": "progress", "value": 21, "maximum": 90, "message": "去背景并对齐 21 / 90 帧", "sequence": 8, "timestamp": "2026-10-13T05:03:10"}
+{"event": "progress", "value": 25, "maximum": 90, "message": "去背景并对齐 25 / 90 帧", "sequence": 9, "timestamp": "2026-10-13T05:03:10"}
+{"event": "progress", "value": 29, "maximum": 90, "message": "去背景并对齐 29 / 90 帧", "sequence": 10, "timestamp": "2026-10-13T05:03:10"}
+{"event": "progress", "value": 33, "maximum": 90, "message": "去背景并对齐 33 / 90 帧", "sequence": 11, "timestamp": "2026-10-13T05:03:11"}
+{"event": "progress", "value": 37, "maximum": 90, "message": "去背景并对齐 37 / 90 帧", "sequence": 12, "timestamp": "2026-10-13T05:03:11"}
+{"event": "progress", "value": 41, "maximum": 90, "message": "去背景并对齐 41 / 90 帧", "sequence": 13, "timestamp": "2026-10-13T05:03:12"}
+{"event": "progress", "value": 45, "maximum": 90, "message": "去背景并对齐 45 / 90 帧", "sequence": 14, "timestamp": "2026-10-13T05:03:12"}
+{"event": "progress", "value": 49, "maximum": 90, "message": "去背景并对齐 49 / 90 帧", "sequence": 15, "timestamp": "2026-10-13T05:03:13"}
+{"event": "progress", "value": 53, "maximum": 90, "message": "去背景并对齐 53 / 90 帧", "sequence": 16, "timestamp": "2026-10-13T05:03:13"}
+{"event": "progress", "value": 57, "maximum": 90, "message": "去背景并对齐 57 / 90 帧", "sequence": 17, "timestamp": "2026-10-13T05:03:14"}
+{"event": "progress", "value": 61, "maximum": 90, "message": "去背景并对齐 61 / 90 帧", "sequence": 18, "timestamp": "2026-10-13T05:03:14"}
+{"event": "progress", "value": 65, "maximum": 90, "message": "去背景并对齐 65 / 90 帧", "sequence": 19, "timestamp": "2026-10-13T05:03:15"}
+{"event": "progress", "value": 69, "maximum": 90, "message": "去背景并对齐 69 / 90 帧", "sequence": 20, "timestamp": "2026-10-13T05:03:15"}
+{"event": "progress", "value": 73, "maximum": 90, "message": "去背景并对齐 73 / 90 帧", "sequence": 21, "timestamp": "2026-10-13T05:03:16"}
+{"event": "progress", "value": 77, "maximum": 90, "message": "去背景并对齐 77 / 90 帧", "sequence": 22, "timestamp": "2026-10-13T05:03:16"}
+{"event": "progress", "value": 81, "maximum": 90, "message": "去背景并对齐 81 / 90 帧", "sequence": 23, "timestamp": "2026-10-13T05:03:17"}
+{"event": "progress", "value": 85, "maximum": 90, "message": "去背景并对齐 85 / 90 帧", "sequence": 24, "timestamp": "2026-10-13T05:03:17"}
+{"event": "progress", "value": 89, "maximum": 90, "message": "去背景并对齐 89 / 90 帧", "sequence": 25, "timestamp": "2026-10-13T05:03:18"}
+{"event": "asset", "stage": "sprites", "record": {"id": "1b9bad99df8841f2b31cd917a57c4989", "path": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\sprites.png", "kind": "sprites", "run_directory": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6", "gif": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\animation.gif", "frames": 77, "cell_size": [384, 512], "metadata": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\sprite_metadata.json", "resource": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\animation.tres", "animation_fps": 24.0, "animation_name": "walk_left"}, "sequence": 26, "timestamp": "2026-10-13T05:03:22"}
+{"event": "result", "result": {"stage": "sprites", "assets": [{"id": "1b9bad99df8841f2b31cd917a57c4989", "path": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\sprites.png", "kind": "sprites", "run_directory": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6", "gif": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\animation.gif", "frames": 77, "cell_size": [384, 512], "metadata": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\sprite_metadata.json", "resource": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050307-sprites-34b9d6\\animation.tres", "animation_fps": 24.0, "animation_name": "walk_left"}]}, "sequence": 27, "timestamp": "2026-10-13T05:03:22"}

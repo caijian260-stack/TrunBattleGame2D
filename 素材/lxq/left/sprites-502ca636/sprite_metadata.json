@@ -1,0 +1,191 @@
+{
+  "source_video": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\imports\\8635523c450c.mp4",
+  "video_frames": 90,
+  "video_fps": 24.0,
+  "cycle_start": 38,
+  "cycle_end": 80,
+  "selected_frames": [
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79
+  ],
+  "animation_fps": 24.0,
+  "animation_name": "walk_left",
+  "cell_size": [
+    384,
+    512
+  ],
+  "grid": [
+    4,
+    11
+  ],
+  "pixel_grid": 1,
+  "sampling": "source",
+  "alignment": "source",
+  "remove_shadows": true,
+  "effective_resolution": [
+    384,
+    512
+  ],
+  "transparent": true,
+  "sprite_sheet": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\sprites.png",
+  "resource": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\animation.tres",
+  "gif": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\animation.gif",
+  "cycle_candidates": [
+    {
+      "period": 42,
+      "score": 0.01420324961617589
+    },
+    {
+      "period": 41,
+      "score": 0.01601647784728557
+    },
+    {
+      "period": 40,
+      "score": 0.02128508942425251
+    },
+    {
+      "period": 39,
+      "score": 0.025670998161658645
+    },
+    {
+      "period": 38,
+      "score": 0.03062657388970256
+    },
+    {
+      "period": 21,
+      "score": 0.03138464184142649
+    },
+    {
+      "period": 20,
+      "score": 0.03219665727615357
+    },
+    {
+      "period": 22,
+      "score": 0.032974351033568376
+    },
+    {
+      "period": 37,
+      "score": 0.034006583494879304
+    },
+    {
+      "period": 19,
+      "score": 0.034396388158202174
+    },
+    {
+      "period": 23,
+      "score": 0.03468236858211458
+    },
+    {
+      "period": 36,
+      "score": 0.036178393745422366
+    },
+    {
+      "period": 24,
+      "score": 0.03631223738193512
+    },
+    {
+      "period": 18,
+      "score": 0.036520305274426935
+    },
+    {
+      "period": 35,
+      "score": 0.03695239133760333
+    },
+    {
+      "period": 25,
+      "score": 0.03733548003882169
+    },
+    {
+      "period": 34,
+      "score": 0.03843217745423317
+    },
+    {
+      "period": 17,
+      "score": 0.03858203509710729
+    },
+    {
+      "period": 26,
+      "score": 0.03866892739534378
+    },
+    {
+      "period": 27,
+      "score": 0.03939366060346365
+    },
+    {
+      "period": 33,
+      "score": 0.03959986905604601
+    },
+    {
+      "period": 16,
+      "score": 0.03994200541973114
+    },
+    {
+      "period": 29,
+      "score": 0.04007976237684489
+    },
+    {
+      "period": 30,
+      "score": 0.04011347364485263
+    },
+    {
+      "period": 32,
+      "score": 0.040168149054050445
+    },
+    {
+      "period": 28,
+      "score": 0.04017095031738282
+    },
+    {
+      "period": 31,
+      "score": 0.04042640230506658
+    },
+    {
+      "period": 15,
+      "score": 0.040907433441653845
+    },
+    {
+      "period": 14,
+      "score": 0.04136585030704737
+    }
+  ]
+}

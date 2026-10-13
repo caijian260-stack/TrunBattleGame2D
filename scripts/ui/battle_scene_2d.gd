@@ -1,8 +1,10 @@
 class_name BattleScene2D
 extends Control
 
-## 2D 战斗场景父类。
+## 2D 战斗场景父类：左右对峙的指令式战斗界面。
 ##
+## 布局约定：敌人位于画面左侧，己方角色位于右侧，敌人血量以左上角横条呈现，
+## 回合与行动资源在右上角，己方队伍卡与指令区集中在右侧。
 ## 本类只负责 2D 表现与输入界面，战斗规则仍由 BattleEngine 和 CharacterClass
 ## 子类提供。具体 2D 场景可以通过继承本类替换职业、敌人和默认外观。
 
@@ -11,12 +13,57 @@ const BattleQTEScript := preload("res://scripts/core/battle_qte.gd")
 const SwordCultivatorScript := preload("res://scripts/classes/sword_cultivator.gd")
 const TrainingDummyScript := preload("res://scripts/classes/training_dummy.gd")
 const BattleMenuScript := preload("res://scripts/core/battle_menu.gd")
+const PlayerBattleCharacter2DScript := preload(
+	"res://scripts/ui/player_battle_character_2d.gd"
+)
+const EnemyBattleCharacter2DScript := preload(
+	"res://scripts/ui/enemy_battle_character_2d.gd"
+)
 
-const PLAYER_ACCENT := Color(0.22, 0.74, 0.96)
-const ENEMY_ACCENT := Color(0.96, 0.32, 0.25)
+# --------------------------------------------------------------------------
+# 配色
+# --------------------------------------------------------------------------
+
+const PLAYER_ACCENT := Color(0.24, 0.75, 0.98)
+const ENEMY_ACCENT := Color(0.95, 0.3, 0.28)
+const GOLD_ACCENT := Color(0.93, 0.78, 0.44)
 const HEALTH_HIGH := Color(0.25, 0.9, 0.52)
 const HEALTH_MEDIUM := Color(1.0, 0.76, 0.2)
 const HEALTH_LOW := Color(1.0, 0.25, 0.2)
+const TEXT_PRIMARY := Color(0.94, 0.965, 0.98)
+const TEXT_MUTED := Color(0.63, 0.71, 0.77)
+const PLATE_FILL := Color(0.035, 0.07, 0.105, 0.9)
+const PLATE_FILL_SOFT := Color(0.03, 0.055, 0.08, 0.82)
+
+# --------------------------------------------------------------------------
+# 布局（基准分辨率 1600x900，其余分辨率按同样的比例关系排布）
+# --------------------------------------------------------------------------
+
+const PLATE_SKEW := 34.0
+const PLATE_MARGIN := Vector2(22.0, 18.0)
+const ENEMY_PLATE_SIZE := Vector2(620.0, 98.0)
+const STATUS_PLATE_SIZE := Vector2(400.0, 98.0)
+const ACTION_PANEL_WIDTH := 344.0
+const ACTION_PANEL_TOP := 268.0
+const ACTION_PANEL_MIN_HEIGHT := 300.0
+const PARTY_SLOT_COUNT := 3
+const PARTY_CARD_SIZE := Vector2(240.0, 96.0)
+const PARTY_CARD_GAP := 12.0
+const LOG_PANEL_SIZE := Vector2(470.0, 132.0)
+const QTE_PANEL_SIZE := Vector2(620.0, 150.0)
+const RESULT_PANEL_SIZE := Vector2(540.0, 186.0)
+const UI_MARGIN := 22.0
+const ENEMY_FIELD_CENTER := Vector2(0.21, 0.60)
+const PLAYER_FIELD_CENTER := Vector2(0.72, 0.60)
+
+## 画面缩放：HUD 与字体统一按该系数缩小。
+const UI_SCALE := 0.82
+## 角色缩放：数值越小越像“拉远视角”，两名角色的间距同时被拉开。
+const UNIT_SCALE := 0.78
+
+@export var background_texture: Texture2D
+@export var background_modulate: Color = Color.WHITE
+@export var draw_arena_over_background := false
 
 enum View {
 	MAIN,
@@ -27,23 +74,48 @@ enum View {
 var engine: BattleEngine
 var player_unit: BattleUnit
 var enemy_unit: BattleUnit
+var focus_enemy: BattleUnit
 var current_view: int = View.MAIN
 var encounter_data: Dictionary = {}
 
+# 左上：敌人血量
+var _enemy_plate: Control
+var _enemy_plate_row: HBoxContainer
+var _enemy_name_label: Label
+var _enemy_hp_value_label: Label
+var _enemy_hp_caption: Label
+
+# 右上：回合与资源
+var _status_plate: Control
+var _status_row: HBoxContainer
 var _turn_label: Label
-var _player_status: Label
-var _enemy_status: Label
-var _player_battle_label: Label
-var _enemy_battle_label: Label
-var _log_label: RichTextLabel
+var _battle_progress_label: Label
+var _state_chip: PanelContainer
+var _state_label: Label
+var _ap_caption: Label
+
+# 右侧：指令区
 var _action_panel: PanelContainer
 var _action_title: Label
-var _action_grid: GridContainer
+var _action_subtitle: Label
+var _action_list: VBoxContainer
+var _action_shortcuts: Array[Callable] = []
 var _end_turn_button: Button
+
+# 右下：己方队伍卡 / 左下：战斗记录
+var _party_strip: HBoxContainer
+var _feed_panel: PanelContainer
+var _log_label: RichTextLabel
+var _player_battle_label: Label
+var _enemy_battle_label: Label
+
+# 覆盖层
+var _dim_overlay: ColorRect
 var _result_panel: PanelContainer
 var _result_label: Label
 var _result_hint: Label
 var _return_scene_button: Button
+
 var _qte_panel: PanelContainer
 var _qte_title: Label
 var _qte_instruction: Label
@@ -57,7 +129,10 @@ var _qte_task: BattleQTE = null
 var _qte_active := false
 var _qte_elapsed := 0.0
 var _qte_hide_at := 0.0
+
 var _scene_flow: Node = null
+var _pulse := 0.0
+var _character_visuals: Dictionary = {}
 
 
 func _ready() -> void:
@@ -67,6 +142,7 @@ func _ready() -> void:
 	_load_encounter_context()
 	_build_hud()
 	_setup_battle()
+	_layout_hud()
 	_refresh_ui()
 
 
@@ -92,253 +168,632 @@ func _process(delta: float) -> void:
 		_qte_panel.visible = false
 		_qte_hide_at = 0.0
 
+	if engine != null:
+		_pulse += delta
+		for visual in _character_visuals.values():
+			if visual != null:
+				visual.update(delta)
+		queue_redraw()
+
+
+# --------------------------------------------------------------------------
+# 绘制
+# --------------------------------------------------------------------------
+
 
 func _draw() -> void:
-	var canvas_size := size
-	if canvas_size.x <= 1.0 or canvas_size.y <= 1.0:
+	var canvas := size
+	if canvas.x <= 1.0 or canvas.y <= 1.0:
 		return
 
-	draw_rect(Rect2(Vector2.ZERO, canvas_size), Color(0.035, 0.055, 0.08))
+	_draw_backdrop(canvas)
+	if background_texture == null or draw_arena_over_background:
+		_draw_arena(canvas)
+
+	_draw_field()
+
+	_draw_plate(_enemy_plate_rect(), ENEMY_ACCENT, true)
+	_draw_enemy_health_bar()
+	_draw_plate(_status_plate_rect(), PLAYER_ACCENT, false)
+	_draw_ap_pips()
+
+
+func _draw_backdrop(canvas: Vector2) -> void:
+	if background_texture != null:
+		draw_texture_rect(
+			background_texture,
+			Rect2(Vector2.ZERO, canvas),
+			false,
+			background_modulate
+		)
+	else:
+		_draw_default_background(canvas)
+
+	# 上下压暗，保证 HUD 文字在明亮背景上依然清晰。
+	_draw_scrim(Rect2(0.0, 0.0, canvas.x, 172.0), 0.4, true)
+	_draw_scrim(Rect2(0.0, canvas.y - 200.0, canvas.x, 200.0), 0.45, false)
+
+
+func _draw_default_background(canvas: Vector2) -> void:
+	draw_rect(Rect2(Vector2.ZERO, canvas), Color(0.035, 0.055, 0.08))
 	draw_rect(
-		Rect2(0.0, canvas_size.y * 0.58, canvas_size.x, canvas_size.y * 0.42),
+		Rect2(0.0, canvas.y * 0.58, canvas.x, canvas.y * 0.42),
 		Color(0.06, 0.1, 0.12)
 	)
 
-	var arena_center := Vector2(canvas_size.x * 0.5, canvas_size.y * 0.72)
-	var arena_radius := Vector2(canvas_size.x * 0.42, canvas_size.y * 0.2)
-	var arena_points := _ellipse_points(arena_center, arena_radius, 72)
-	arena_points.append(arena_points[0])
-	draw_colored_polygon(arena_points, Color(0.09, 0.145, 0.18, 0.96))
-	draw_polyline(arena_points, Color(0.18, 0.48, 0.62, 0.75), 3.0)
-	draw_arc(
-		arena_center,
-		arena_radius.x * 0.55,
-		0.0,
-		TAU,
-		72,
-		Color(0.16, 0.34, 0.42, 0.65),
-		2.0
+
+func _draw_scrim(rect: Rect2, max_alpha: float, from_top: bool) -> void:
+	var clear := Color(0.012, 0.02, 0.032, 0.0)
+	var solid := Color(0.012, 0.02, 0.032, max_alpha)
+	var top_color := solid if from_top else clear
+	var bottom_color := clear if from_top else solid
+	draw_polygon(
+		PackedVector2Array([
+			rect.position,
+			Vector2(rect.end.x, rect.position.y),
+			rect.end,
+			Vector2(rect.position.x, rect.end.y),
+		]),
+		PackedColorArray([top_color, top_color, bottom_color, bottom_color])
 	)
 
-	if player_unit != null:
-		_draw_unit(_player_origin(), PLAYER_ACCENT, true)
-	if enemy_unit != null:
-		_draw_unit(_enemy_origin(), ENEMY_ACCENT, false)
+
+func _draw_arena(canvas: Vector2) -> void:
+	var arena_center := Vector2(canvas.x * 0.5, canvas.y * 0.68)
+	var arena_radius := Vector2(canvas.x * 0.42, canvas.y * 0.18)
+	var arena_points := _ellipse_points(arena_center, arena_radius, 72)
+	arena_points.append(arena_points[0])
+	draw_colored_polygon(arena_points, Color(0.09, 0.145, 0.18, 0.9))
+	draw_polyline(arena_points, Color(0.18, 0.48, 0.62, 0.6), 3.0, true)
+
+
+func _plate_points(rect: Rect2, slant_right: bool) -> PackedVector2Array:
+	var skew := minf(_s(PLATE_SKEW), rect.size.x * 0.2)
+	if slant_right:
+		return PackedVector2Array([
+			rect.position,
+			Vector2(rect.end.x - skew, rect.position.y),
+			Vector2(rect.end.x, rect.position.y + skew),
+			rect.end,
+			Vector2(rect.position.x, rect.end.y),
+		])
+	return PackedVector2Array([
+		Vector2(rect.end.x, rect.position.y),
+		Vector2(rect.position.x + skew, rect.position.y),
+		Vector2(rect.position.x, rect.position.y + skew),
+		Vector2(rect.position.x, rect.end.y),
+		rect.end,
+	])
+
+
+func _draw_plate(rect: Rect2, accent: Color, slant_right: bool) -> void:
+	var points := _plate_points(rect, slant_right)
+	draw_colored_polygon(points, PLATE_FILL)
+	var outline := points.duplicate()
+	outline.append(points[0])
+	draw_polyline(
+		outline,
+		Color(accent.r, accent.g, accent.b, 0.5),
+		_s(1.6),
+		true
+	)
+
+	var underline := _s(3.0)
+	draw_rect(
+		Rect2(rect.position.x, rect.end.y - underline, rect.size.x, underline),
+		Color(accent.r, accent.g, accent.b, 0.85)
+	)
+
+	var bar_width := _s(5.0)
+	var bar_x := rect.position.x if slant_right else rect.end.x - bar_width
+	draw_rect(
+		Rect2(bar_x, rect.position.y, bar_width, rect.size.y - underline),
+		Color(accent.r, accent.g, accent.b, 0.9)
+	)
+
+
+func _draw_enemy_health_bar() -> void:
+	var bar := _enemy_hp_bar_rect()
+	var unit := _focus_unit()
+	var ratio := 0.0 if unit == null else clampf(unit.hp_ratio(), 0.0, 1.0)
+
+	draw_rect(bar, Color(0.02, 0.03, 0.045, 0.94))
+	var inner := Rect2(
+		bar.position + Vector2(_s(2.0), _s(2.0)),
+		Vector2(
+			maxf((bar.size.x - _s(4.0)) * ratio, 0.0),
+			bar.size.y - _s(4.0)
+		)
+	)
+	if inner.size.x > 0.0:
+		var fill := ENEMY_ACCENT if ratio > 0.25 else Color(1.0, 0.45, 0.32)
+		draw_rect(inner, fill)
+		draw_rect(
+			Rect2(inner.position, Vector2(inner.size.x, _s(3.0))),
+			fill.lightened(0.4)
+		)
+
+	for tick in range(1, 5):
+		var x := (
+			bar.position.x
+			+ _s(2.0)
+			+ (bar.size.x - _s(4.0)) * (float(tick) / 5.0)
+		)
+		draw_line(
+			Vector2(x, bar.position.y + _s(2.0)),
+			Vector2(x, bar.end.y - _s(2.0)),
+			Color(0.0, 0.0, 0.0, 0.3),
+			_s(1.0)
+		)
+
+	draw_rect(
+		bar,
+		Color(ENEMY_ACCENT.r, ENEMY_ACCENT.g, ENEMY_ACCENT.b, 0.8),
+		false,
+		_s(1.5)
+	)
+
+
+func _draw_ap_pips() -> void:
+	if player_unit == null:
+		return
+	var rect := _ap_pips_rect()
+	var count := maxi(player_unit.max_ap, 1)
+	var gap := _s(6.0)
+	var pip_width := minf(
+		_s(13.0),
+		(rect.size.x - gap * float(count - 1)) / float(count)
+	)
+	if pip_width <= 1.0:
+		return
+	var total := pip_width * float(count) + gap * float(count - 1)
+	var start_x := rect.end.x - total
+	var center_y := rect.position.y + rect.size.y * 0.5
+	var half_height := _s(7.0)
+
+	for index in range(count):
+		var center_x := start_x + pip_width * 0.5 + float(index) * (pip_width + gap)
+		var points := PackedVector2Array([
+			Vector2(center_x, center_y - half_height),
+			Vector2(center_x + pip_width * 0.5, center_y),
+			Vector2(center_x, center_y + half_height),
+			Vector2(center_x - pip_width * 0.5, center_y),
+		])
+		if index < player_unit.ap:
+			draw_colored_polygon(
+				points,
+				Color(PLAYER_ACCENT.r, PLAYER_ACCENT.g, PLAYER_ACCENT.b, 0.95)
+			)
+		else:
+			var outline := points.duplicate()
+			outline.append(points[0])
+			draw_polyline(
+				outline,
+				Color(PLAYER_ACCENT.r, PLAYER_ACCENT.g, PLAYER_ACCENT.b, 0.32),
+				_s(1.4),
+				true
+			)
+
+
+# --------------------------------------------------------------------------
+# 战场
+# --------------------------------------------------------------------------
+
+
+func _draw_field() -> void:
+	if engine == null:
+		return
+
+	var enemies := _field_enemies()
+	var enemy_origins := _field_origins(ENEMY_FIELD_CENTER, enemies.size())
+	for index in range(enemies.size()):
+		var unit := enemies[index]
+		if index >= enemy_origins.size():
+			continue
+		var origin := enemy_origins[index]
+		_draw_unit(unit, origin, ENEMY_ACCENT, false)
+		if unit == focus_enemy and _is_player_turn():
+			_draw_target_marker(origin)
+
+	var players := _field_players()
+	var player_origins := _field_origins(PLAYER_FIELD_CENTER, players.size())
+	for index in range(players.size()):
+		if index >= player_origins.size():
+			continue
+		_draw_unit(players[index], player_origins[index], PLAYER_ACCENT, true)
+
+
+func _field_enemies() -> Array[BattleUnit]:
+	var units: Array[BattleUnit] = []
+	if engine != null:
+		units = engine.enemy_units
+	return units
+
+
+func _field_players() -> Array[BattleUnit]:
+	var units: Array[BattleUnit] = []
+	if engine != null:
+		units = engine.player_units
+	return units
+
+
+func _field_origins(center_ratio: Vector2, count: int) -> Array[Vector2]:
+	var origins: Array[Vector2] = []
+	if count <= 0:
+		return origins
+
+	var center := Vector2(size.x * center_ratio.x, size.y * center_ratio.y)
+	var spread := clampf(size.x / 1600.0, 0.65, 1.6)
+	var offsets: Array[Vector2] = []
+	if count == 1:
+		offsets = [Vector2.ZERO]
+	elif count == 2:
+		offsets = [Vector2(-78.0, -14.0), Vector2(78.0, 18.0)]
+	else:
+		offsets = [
+			Vector2(-140.0, -10.0),
+			Vector2(0.0, 26.0),
+			Vector2(140.0, -10.0),
+		]
+		while offsets.size() < count:
+			offsets.append(Vector2(0.0, 26.0))
+
+	for offset in offsets:
+		origins.append(center + offset * spread)
+	return origins
+
+
+func _draw_unit(
+	unit: BattleUnit,
+	origin: Vector2,
+	accent: Color,
+	is_player: bool
+) -> void:
+	if unit == null:
+		return
+	var active := engine != null and engine.active_actor == unit
+	var visual := _get_character_visual(unit, accent, is_player)
+	if visual == null:
+		return
+	visual.draw(self, origin, active)
+
+
+func _get_character_visual(
+	unit: BattleUnit,
+	accent: Color,
+	is_player: bool
+) -> BattleCharacter2D:
+	var visual: BattleCharacter2D = _character_visuals.get(unit)
+	if visual == null:
+		visual = _create_character_visual(unit, accent, is_player)
+		_character_visuals[unit] = visual
+	return visual
+
+
+func _create_character_visual(
+	unit: BattleUnit,
+	accent: Color,
+	is_player: bool
+) -> BattleCharacter2D:
+	var visual: BattleCharacter2D
+	if is_player:
+		visual = PlayerBattleCharacter2DScript.new()
+	else:
+		visual = EnemyBattleCharacter2DScript.new()
+	visual.display_scale = UNIT_SCALE
+	visual.setup(unit, accent, is_player)
+	return visual
+
+
+func _draw_target_marker(origin: Vector2) -> void:
+	draw_set_transform(origin, 0.0, Vector2(UNIT_SCALE, UNIT_SCALE))
+	var bob := 4.0 * sin(_pulse * 3.0)
+	var center := Vector2(0.0, -214.0 + bob)
+	var half := 12.0
+	var diamond := PackedVector2Array([
+		Vector2(center.x, center.y - half),
+		Vector2(center.x + half * 0.72, center.y),
+		Vector2(center.x, center.y + half),
+		Vector2(center.x - half * 0.72, center.y),
+	])
+	draw_colored_polygon(
+		diamond,
+		Color(ENEMY_ACCENT.r, ENEMY_ACCENT.g, ENEMY_ACCENT.b, 0.9)
+	)
+	var outline := diamond.duplicate()
+	outline.append(diamond[0])
+	draw_polyline(outline, Color(1.0, 0.94, 0.9, 0.9), 1.6, true)
+	draw_colored_polygon(
+		PackedVector2Array([
+			Vector2(center.x, center.y + 21.0),
+			Vector2(center.x - 7.0, center.y + 9.0),
+			Vector2(center.x + 7.0, center.y + 9.0),
+		]),
+		Color(ENEMY_ACCENT.r, ENEMY_ACCENT.g, ENEMY_ACCENT.b, 0.75)
+	)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+# --------------------------------------------------------------------------
+# HUD 构建
+# --------------------------------------------------------------------------
 
 
 func _build_hud() -> void:
-	_turn_label = Label.new()
-	_turn_label.name = "TurnLabel"
-	_turn_label.anchor_left = 0.5
-	_turn_label.anchor_right = 0.5
-	_turn_label.offset_left = -240.0
-	_turn_label.offset_right = 240.0
-	_turn_label.offset_top = 16.0
-	_turn_label.offset_bottom = 58.0
-	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_turn_label.add_theme_font_size_override("font_size", 24)
-	_turn_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0))
-	add_child(_turn_label)
-
-	_player_status = _create_status_panel("玩家单位", PLAYER_ACCENT, false)
-	_enemy_status = _create_status_panel("敌方单位", ENEMY_ACCENT, true)
+	_build_enemy_plate()
+	_build_status_plate()
+	_build_action_panel()
+	_party_strip = _build_party_strip()
+	_build_log_panel()
 	_player_battle_label = _create_battle_label(PLAYER_ACCENT)
 	_enemy_battle_label = _create_battle_label(ENEMY_ACCENT)
-	_create_action_panel()
-	_create_log_panel()
-	_create_qte_panel()
-	_create_result_panel()
+	_qte_panel = _build_qte_panel()
+
+	_dim_overlay = ColorRect.new()
+	_dim_overlay.name = "DimOverlay"
+	_dim_overlay.color = Color(0.01, 0.02, 0.03, 0.62)
+	_dim_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_dim_overlay.visible = false
+	add_child(_dim_overlay)
+
+	_result_panel = _build_result_panel()
 
 
-func _create_status_panel(title: String, accent: Color, align_right: bool) -> Label:
-	var panel := PanelContainer.new()
-	panel.anchor_left = 1.0 if align_right else 0.0
-	panel.anchor_right = 1.0 if align_right else 0.0
-	panel.offset_left = -348.0 if align_right else 18.0
-	panel.offset_right = -18.0 if align_right else 348.0
-	panel.offset_top = 18.0
-	panel.offset_bottom = 172.0
-	panel.add_theme_stylebox_override("panel", _panel_style(accent))
-	add_child(panel)
+func _build_enemy_plate() -> void:
+	_enemy_plate = Control.new()
+	_enemy_plate.name = "EnemyPlate"
+	_enemy_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_enemy_plate)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	panel.add_child(margin)
+	_enemy_plate_row = HBoxContainer.new()
+	_enemy_plate_row.name = "EnemyPlateRow"
+	_enemy_plate_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_enemy_plate_row.add_theme_constant_override("separation", 12)
+	_enemy_plate.add_child(_enemy_plate_row)
+
+	var tag_holder := PanelContainer.new()
+	tag_holder.custom_minimum_size = _sv(Vector2(86.0, 28.0))
+	tag_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag_holder.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			Color(0.34, 0.08, 0.09, 0.92),
+			Color(ENEMY_ACCENT.r, ENEMY_ACCENT.g, ENEMY_ACCENT.b, 0.72),
+			3
+		)
+	)
+	_enemy_plate_row.add_child(tag_holder)
+
+	var tag_label := Label.new()
+	tag_label.text = "ENEMY"
+	tag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tag_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag_label.add_theme_font_size_override("font_size", _fs(14))
+	tag_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.78))
+	tag_holder.add_child(tag_label)
+
+	_enemy_name_label = Label.new()
+	_enemy_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_enemy_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_enemy_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_enemy_name_label.add_theme_font_size_override("font_size", _fs(23))
+	_enemy_name_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	_enemy_name_label.add_theme_color_override(
+		"font_shadow_color",
+		Color(0.0, 0.0, 0.0, 0.85)
+	)
+	_enemy_name_label.add_theme_constant_override("shadow_offset_x", 1)
+	_enemy_name_label.add_theme_constant_override("shadow_offset_y", 2)
+	_enemy_plate_row.add_child(_enemy_name_label)
+
+	_enemy_hp_value_label = Label.new()
+	_enemy_hp_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_enemy_hp_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_enemy_hp_value_label.custom_minimum_size = _sv(Vector2(168.0, 0.0))
+	_enemy_hp_value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_enemy_hp_value_label.add_theme_font_size_override("font_size", _fs(18))
+	_enemy_hp_value_label.add_theme_color_override(
+		"font_color",
+		Color(1.0, 0.9, 0.86)
+	)
+	_enemy_plate_row.add_child(_enemy_hp_value_label)
+
+	_enemy_hp_caption = Label.new()
+	_enemy_hp_caption.text = BattleAttribute.label(BattleAttribute.Type.HP)
+	_enemy_hp_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_enemy_hp_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_enemy_hp_caption.add_theme_font_size_override("font_size", _fs(14))
+	_enemy_hp_caption.add_theme_color_override(
+		"font_color",
+		Color(1.0, 0.68, 0.62)
+	)
+	_enemy_plate.add_child(_enemy_hp_caption)
+
+
+func _build_status_plate() -> void:
+	_status_plate = Control.new()
+	_status_plate.name = "StatusPlate"
+	_status_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_status_plate)
+
+	_status_row = HBoxContainer.new()
+	_status_row.name = "StatusRow"
+	_status_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_row.add_theme_constant_override("separation", 8)
+	_status_plate.add_child(_status_row)
+
+	_turn_label = Label.new()
+	_turn_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_turn_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_turn_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_turn_label.add_theme_font_size_override("font_size", _fs(22))
+	_turn_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	_turn_label.add_theme_color_override(
+		"font_shadow_color",
+		Color(0.0, 0.0, 0.0, 0.85)
+	)
+	_turn_label.add_theme_constant_override("shadow_offset_x", 1)
+	_turn_label.add_theme_constant_override("shadow_offset_y", 2)
+	_status_row.add_child(_turn_label)
+
+	_battle_progress_label = Label.new()
+	_battle_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_battle_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_battle_progress_label.custom_minimum_size = _sv(Vector2(140.0, 0.0))
+	_battle_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_battle_progress_label.add_theme_font_size_override("font_size", _fs(14))
+	_battle_progress_label.add_theme_color_override("font_color", TEXT_MUTED)
+	_status_row.add_child(_battle_progress_label)
+
+	_state_chip = PanelContainer.new()
+	_state_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_plate.add_child(_state_chip)
+
+	_state_label = Label.new()
+	_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_state_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_state_label.add_theme_font_size_override("font_size", _fs(15))
+	_state_chip.add_child(_state_label)
+
+	_ap_caption = Label.new()
+	_ap_caption.text = BattleAttribute.label(BattleAttribute.Type.AP)
+	_ap_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ap_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_ap_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ap_caption.add_theme_font_size_override("font_size", _fs(14))
+	_ap_caption.add_theme_color_override("font_color", TEXT_MUTED)
+	_status_plate.add_child(_ap_caption)
+
+
+func _build_action_panel() -> void:
+	_action_panel = PanelContainer.new()
+	_action_panel.name = "ActionPanel"
+	_action_panel.add_theme_stylebox_override("panel", _panel_style(PLAYER_ACCENT))
+	add_child(_action_panel)
 
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 5)
-	margin.add_child(content)
+	content.add_theme_constant_override("separation", 8)
+	_action_panel.add_child(content)
 
-	var accent_line := ColorRect.new()
-	accent_line.custom_minimum_size = Vector2(0.0, 3.0)
-	accent_line.color = accent
-	content.add_child(accent_line)
+	_action_title = Label.new()
+	_action_title.add_theme_font_size_override("font_size", _fs(20))
+	_action_title.add_theme_color_override("font_color", GOLD_ACCENT)
+	content.add_child(_action_title)
+
+	_action_subtitle = Label.new()
+	_action_subtitle.add_theme_font_size_override("font_size", _fs(13))
+	_action_subtitle.add_theme_color_override("font_color", TEXT_MUTED)
+	content.add_child(_action_subtitle)
+
+	var divider := ColorRect.new()
+	divider.custom_minimum_size = Vector2(0.0, _s(2.0))
+	divider.color = Color(PLAYER_ACCENT.r, PLAYER_ACCENT.g, PLAYER_ACCENT.b, 0.4)
+	content.add_child(divider)
+
+	_action_list = VBoxContainer.new()
+	_action_list.name = "ActionList"
+	_action_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_action_list.add_theme_constant_override("separation", 8)
+	content.add_child(_action_list)
+
+	_end_turn_button = Button.new()
+	_end_turn_button.text = "结束回合"
+	_end_turn_button.custom_minimum_size = Vector2(0.0, _s(42.0))
+	_end_turn_button.pressed.connect(_on_end_turn_pressed)
+	_style_button(_end_turn_button, GOLD_ACCENT)
+	content.add_child(_end_turn_button)
+
+
+func _build_party_strip() -> HBoxContainer:
+	var strip := HBoxContainer.new()
+	strip.name = "PartyStrip"
+	strip.add_theme_constant_override("separation", int(PARTY_CARD_GAP))
+	add_child(strip)
+	return strip
+
+
+func _build_log_panel() -> void:
+	_feed_panel = PanelContainer.new()
+	_feed_panel.name = "BattleLog"
+	_feed_panel.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			Color(0.02, 0.035, 0.05, 0.8),
+			Color(0.4, 0.58, 0.7, 0.42),
+			6
+		)
+	)
+	add_child(_feed_panel)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 4)
+	_feed_panel.add_child(content)
 
 	var heading := Label.new()
-	heading.text = title
-	heading.add_theme_font_size_override("font_size", 17)
-	heading.add_theme_color_override("font_color", accent.lightened(0.22))
+	heading.text = "战斗记录"
+	heading.add_theme_font_size_override("font_size", _fs(14))
+	heading.add_theme_color_override("font_color", Color(0.72, 0.82, 0.9))
 	content.add_child(heading)
 
-	var status := Label.new()
-	status.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.add_theme_font_size_override("font_size", 14)
-	status.add_theme_color_override("font_color", Color(0.9, 0.94, 0.97))
-	content.add_child(status)
-	return status
+	_log_label = RichTextLabel.new()
+	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_log_label.scroll_following = true
+	_log_label.scroll_active = true
+	_log_label.add_theme_font_size_override("normal_font_size", _fs(13))
+	_log_label.add_theme_color_override("default_color", Color(0.86, 0.92, 0.95))
+	content.add_child(_log_label)
 
 
 func _create_battle_label(accent: Color) -> Label:
 	var label := Label.new()
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.size = Vector2(220.0, 42.0)
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", accent.lightened(0.15))
-	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	label.add_theme_font_size_override("font_size", _fs(15))
+	label.add_theme_color_override("font_color", accent.lightened(0.25))
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	add_child(label)
 	return label
 
 
-func _create_action_panel() -> void:
-	_action_panel = PanelContainer.new()
-	_action_panel.name = "ActionPanel"
-	_action_panel.anchor_top = 1.0
-	_action_panel.anchor_bottom = 1.0
-	_action_panel.offset_left = 18.0
-	_action_panel.offset_top = -286.0
-	_action_panel.offset_right = 458.0
-	_action_panel.offset_bottom = -18.0
-	_action_panel.add_theme_stylebox_override("panel", _panel_style(PLAYER_ACCENT))
-	add_child(_action_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	_action_panel.add_child(margin)
+func _build_qte_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "QTEPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", _panel_style(GOLD_ACCENT))
+	add_child(panel)
 
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", 8)
-	margin.add_child(content)
-
-	_action_title = Label.new()
-	_action_title.text = "行动"
-	_action_title.add_theme_font_size_override("font_size", 18)
-	_action_title.add_theme_color_override("font_color", Color(0.82, 0.94, 1.0))
-	content.add_child(_action_title)
-
-	_action_grid = GridContainer.new()
-	_action_grid.columns = 2
-	_action_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_action_grid.add_theme_constant_override("h_separation", 8)
-	_action_grid.add_theme_constant_override("v_separation", 8)
-	content.add_child(_action_grid)
-
-	_end_turn_button = Button.new()
-	_end_turn_button.text = "结束回合"
-	_end_turn_button.custom_minimum_size = Vector2(0.0, 38.0)
-	_end_turn_button.pressed.connect(_on_end_turn_pressed)
-	_style_button(_end_turn_button, Color(0.18, 0.52, 0.74))
-	content.add_child(_end_turn_button)
-
-
-func _create_log_panel() -> void:
-	var panel := PanelContainer.new()
-	panel.name = "BattleLogPanel"
-	panel.anchor_left = 1.0
-	panel.anchor_top = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_bottom = 1.0
-	panel.offset_left = -424.0
-	panel.offset_top = -286.0
-	panel.offset_right = -18.0
-	panel.offset_bottom = -18.0
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.3, 0.58, 0.72)))
-	add_child(panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	panel.add_child(margin)
-
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 7)
-	margin.add_child(content)
-
-	var heading := Label.new()
-	heading.text = "战斗记录"
-	heading.add_theme_font_size_override("font_size", 17)
-	heading.add_theme_color_override("font_color", Color(0.68, 0.84, 0.94))
-	content.add_child(heading)
-
-	_log_label = RichTextLabel.new()
-	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log_label.scroll_following = true
-	_log_label.add_theme_font_size_override("normal_font_size", 14)
-	_log_label.add_theme_color_override("default_color", Color(0.86, 0.9, 0.94))
-	_log_label.add_theme_stylebox_override(
-		"normal",
-		_flat_style(Color(0.025, 0.04, 0.06, 0.82), Color(0.2, 0.34, 0.42, 0.8), 8)
-	)
-	content.add_child(_log_label)
-
-
-func _create_qte_panel() -> void:
-	_qte_panel = PanelContainer.new()
-	_qte_panel.name = "QTEPanel"
-	_qte_panel.anchor_left = 0.5
-	_qte_panel.anchor_top = 1.0
-	_qte_panel.anchor_right = 0.5
-	_qte_panel.anchor_bottom = 1.0
-	_qte_panel.offset_left = -320.0
-	_qte_panel.offset_top = -210.0
-	_qte_panel.offset_right = 320.0
-	_qte_panel.offset_bottom = -36.0
-	_qte_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.92, 0.68, 0.22)))
-	add_child(_qte_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	_qte_panel.add_child(margin)
-
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 6)
-	margin.add_child(content)
+	panel.add_child(content)
 
 	_qte_title = Label.new()
 	_qte_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_qte_title.add_theme_font_size_override("font_size", 20)
+	_qte_title.add_theme_font_size_override("font_size", _fs(20))
 	_qte_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
 	content.add_child(_qte_title)
 
 	_qte_instruction = Label.new()
 	_qte_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_qte_instruction.add_theme_font_size_override("font_size", 14)
-	_qte_instruction.add_theme_color_override("font_color", Color(0.84, 0.9, 0.95))
+	_qte_instruction.add_theme_font_size_override("font_size", _fs(14))
+	_qte_instruction.add_theme_color_override(
+		"font_color",
+		Color(0.86, 0.92, 0.97)
+	)
 	content.add_child(_qte_instruction)
 
 	_qte_track = Control.new()
-	_qte_track.custom_minimum_size = Vector2(0.0, 48.0)
+	_qte_track.custom_minimum_size = Vector2(0.0, _s(46.0))
 	_qte_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(_qte_track)
 
 	var track_background := ColorRect.new()
 	track_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	track_background.color = Color(0.06, 0.085, 0.12, 0.98)
+	track_background.color = Color(0.05, 0.08, 0.11, 0.98)
 	_qte_track.add_child(track_background)
 
 	_qte_success_zone = ColorRect.new()
@@ -352,7 +807,7 @@ func _create_qte_panel() -> void:
 	_qte_pointer = ColorRect.new()
 	_qte_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_qte_pointer.color = Color.WHITE
-	_qte_pointer.size = Vector2(4.0, 48.0)
+	_qte_pointer.size = Vector2(_s(4.0), _s(46.0))
 	_qte_track.add_child(_qte_pointer)
 
 	var hint_row := HBoxContainer.new()
@@ -361,76 +816,216 @@ func _create_qte_panel() -> void:
 	content.add_child(hint_row)
 
 	_qte_input_hint = Label.new()
-	_qte_input_hint.text = "鼠标左键 / 空格"
-	_qte_input_hint.add_theme_font_size_override("font_size", 14)
+	_qte_input_hint.add_theme_font_size_override("font_size", _fs(14))
 	_qte_input_hint.add_theme_color_override("font_color", Color(1.0, 0.9, 0.62))
 	hint_row.add_child(_qte_input_hint)
 
 	_qte_result = Label.new()
 	_qte_result.text = "等待判定"
-	_qte_result.add_theme_font_size_override("font_size", 14)
-	_qte_result.add_theme_color_override("font_color", Color(0.7, 0.78, 0.84))
+	_qte_result.add_theme_font_size_override("font_size", _fs(14))
+	_qte_result.add_theme_color_override("font_color", Color(0.72, 0.8, 0.86))
 	hint_row.add_child(_qte_result)
-	_qte_panel.visible = false
+
+	panel.visible = false
+	return panel
 
 
-func _create_result_panel() -> void:
-	_result_panel = PanelContainer.new()
-	_result_panel.name = "ResultPanel"
-	_result_panel.anchor_left = 0.5
-	_result_panel.anchor_top = 0.5
-	_result_panel.anchor_right = 0.5
-	_result_panel.anchor_bottom = 0.5
-	_result_panel.offset_left = -220.0
-	_result_panel.offset_top = -78.0
-	_result_panel.offset_right = 220.0
-	_result_panel.offset_bottom = 78.0
-	_result_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.35, 0.68, 0.85)))
-	add_child(_result_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
-	_result_panel.add_child(margin)
+func _build_result_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "ResultPanel"
+	panel.add_theme_stylebox_override("panel", _panel_style(GOLD_ACCENT))
+	add_child(panel)
 
 	var content := VBoxContainer.new()
 	content.alignment = BoxContainer.ALIGNMENT_CENTER
-	content.add_theme_constant_override("separation", 8)
-	margin.add_child(content)
+	content.add_theme_constant_override("separation", 10)
+	panel.add_child(content)
 
 	_result_label = Label.new()
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_result_label.add_theme_font_size_override("font_size", 24)
-	_result_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
+	_result_label.add_theme_font_size_override("font_size", _fs(26))
+	_result_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0))
 	content.add_child(_result_label)
 
 	_result_hint = Label.new()
 	_result_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_result_hint.add_theme_font_size_override("font_size", 14)
-	_result_hint.add_theme_color_override("font_color", Color(0.62, 0.74, 0.82))
+	_result_hint.add_theme_font_size_override("font_size", _fs(14))
+	_result_hint.add_theme_color_override("font_color", TEXT_MUTED)
 	content.add_child(_result_hint)
 
 	var action_row := HBoxContainer.new()
 	action_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	action_row.add_theme_constant_override("separation", 10)
+	action_row.add_theme_constant_override("separation", 12)
 	content.add_child(action_row)
 
 	_return_scene_button = Button.new()
 	_return_scene_button.text = "返回场景"
-	_return_scene_button.custom_minimum_size = Vector2(124.0, 38.0)
+	_return_scene_button.custom_minimum_size = _sv(Vector2(132.0, 40.0))
 	_return_scene_button.pressed.connect(_on_return_scene_pressed)
-	_style_button(_return_scene_button, Color(0.24, 0.62, 0.78))
+	_style_button(_return_scene_button, PLAYER_ACCENT)
 	action_row.add_child(_return_scene_button)
 
 	var restart_button := Button.new()
 	restart_button.text = "重新开始"
-	restart_button.custom_minimum_size = Vector2(124.0, 38.0)
+	restart_button.custom_minimum_size = _sv(Vector2(132.0, 40.0))
 	restart_button.pressed.connect(_on_restart_pressed)
-	_style_button(restart_button, Color(0.4, 0.46, 0.55))
+	_style_button(restart_button, GOLD_ACCENT)
 	action_row.add_child(restart_button)
-	_result_panel.visible = false
+
+	panel.visible = false
+	return panel
+
+
+# --------------------------------------------------------------------------
+# HUD 布局
+# --------------------------------------------------------------------------
+
+
+func _enemy_plate_rect() -> Rect2:
+	return Rect2(_sv(PLATE_MARGIN), _sv(ENEMY_PLATE_SIZE))
+
+
+func _status_plate_rect() -> Rect2:
+	var plate_size := _sv(STATUS_PLATE_SIZE)
+	var margin := _sv(PLATE_MARGIN)
+	return Rect2(
+		Vector2(size.x - plate_size.x - margin.x, margin.y),
+		plate_size
+	)
+
+
+func _enemy_hp_bar_rect() -> Rect2:
+	var plate := _enemy_plate_rect()
+	return Rect2(
+		plate.position + _sv(Vector2(52.0, 54.0)),
+		Vector2(_s(ENEMY_PLATE_SIZE.x - 52.0 - 30.0), _s(22.0))
+	)
+
+
+func _ap_pips_rect() -> Rect2:
+	var plate := _status_plate_rect()
+	return Rect2(
+		plate.position + _sv(Vector2(196.0, 54.0)),
+		Vector2(_s(STATUS_PLATE_SIZE.x - 196.0 - 22.0), _s(24.0))
+	)
+
+
+func _layout_hud() -> void:
+	if _enemy_plate == null:
+		return
+	var canvas := size
+	if canvas.x <= 1.0 or canvas.y <= 1.0:
+		return
+
+	# 左上：敌人血量
+	_enemy_plate.position = _sv(PLATE_MARGIN)
+	_enemy_plate.size = _sv(ENEMY_PLATE_SIZE)
+	_enemy_plate_row.position = _sv(Vector2(20.0, 12.0))
+	_enemy_plate_row.size = Vector2(_s(ENEMY_PLATE_SIZE.x - 40.0), _s(30.0))
+	_enemy_hp_caption.position = _sv(Vector2(20.0, 53.0))
+	_enemy_hp_caption.size = _sv(Vector2(26.0, 24.0))
+
+	# 右上：回合与行动资源
+	_status_plate.size = _sv(STATUS_PLATE_SIZE)
+	_status_plate.position = _status_plate_rect().position
+	_status_row.position = _sv(Vector2(20.0, 12.0))
+	_status_row.size = Vector2(_s(STATUS_PLATE_SIZE.x - 40.0), _s(30.0))
+	_state_chip.position = _sv(Vector2(20.0, 52.0))
+	_state_chip.size = _sv(Vector2(112.0, 28.0))
+	_ap_caption.position = Vector2(_s(STATUS_PLATE_SIZE.x - 216.0), _s(52.0))
+	_ap_caption.size = _sv(Vector2(28.0, 28.0))
+
+	# 右侧：指令区
+	var party_top := canvas.y - _s(UI_MARGIN) - _s(PARTY_CARD_SIZE.y)
+	var panel_bottom := party_top - _s(20.0)
+	var min_height := _s(ACTION_PANEL_MIN_HEIGHT)
+	var available := maxf(panel_bottom - _s(ACTION_PANEL_TOP), min_height)
+	var panel_height := clampf(_action_panel_height(), min_height, available)
+	_action_panel.position = Vector2(
+		canvas.x - _s(ACTION_PANEL_WIDTH) - _s(UI_MARGIN),
+		panel_bottom - panel_height
+	)
+	_action_panel.size = Vector2(_s(ACTION_PANEL_WIDTH), panel_height)
+
+	# 右下：己方队伍卡
+	var strip_width := (
+		_s(PARTY_CARD_SIZE.x) * float(PARTY_SLOT_COUNT)
+		+ _s(PARTY_CARD_GAP) * float(PARTY_SLOT_COUNT - 1)
+	)
+	_party_strip.add_theme_constant_override("separation", int(_s(PARTY_CARD_GAP)))
+	_party_strip.position = Vector2(canvas.x - _s(UI_MARGIN) - strip_width, party_top)
+	_party_strip.size = Vector2(strip_width, _s(PARTY_CARD_SIZE.y))
+
+	# 左下：战斗记录
+	_feed_panel.position = Vector2(
+		_s(UI_MARGIN),
+		canvas.y - _s(UI_MARGIN) - _s(LOG_PANEL_SIZE.y)
+	)
+	_feed_panel.size = _sv(LOG_PANEL_SIZE)
+
+	# 覆盖层
+	_dim_overlay.position = Vector2.ZERO
+	_dim_overlay.size = canvas
+	_qte_panel.size = _sv(QTE_PANEL_SIZE)
+	_qte_panel.position = Vector2(
+		(canvas.x - _s(QTE_PANEL_SIZE.x)) * 0.5,
+		party_top - _s(12.0) - _s(QTE_PANEL_SIZE.y)
+	)
+	_result_panel.size = _sv(RESULT_PANEL_SIZE)
+	_result_panel.position = (canvas - _sv(RESULT_PANEL_SIZE)) * 0.5
+
+	_layout_battle_labels()
+
+
+## 指令区高度按按钮数量估算，避免面板被拉长后中间留出大片空白。
+func _action_panel_height() -> float:
+	var buttons := maxi(_action_list.get_child_count(), 1)
+	return (
+		_s(144.0)
+		+ float(buttons) * _s(50.0)
+		+ float(buttons - 1) * _s(8.0)
+	)
+
+
+func _layout_battle_labels() -> void:
+	if _player_battle_label == null or _enemy_battle_label == null:
+		return
+	var label_size := _sv(Vector2(260.0, 44.0))
+	var label_offset := _sv(Vector2(-130.0, 18.0))
+	_enemy_battle_label.position = _enemy_origin() + label_offset
+	_enemy_battle_label.size = label_size
+	_player_battle_label.position = _player_origin() + label_offset
+	_player_battle_label.size = label_size
+
+
+func _enemy_origin() -> Vector2:
+	var enemies := _field_enemies()
+	var origins := _field_origins(ENEMY_FIELD_CENTER, maxi(enemies.size(), 1))
+	if origins.is_empty():
+		return Vector2(size.x * ENEMY_FIELD_CENTER.x, size.y * ENEMY_FIELD_CENTER.y)
+	var index := enemies.find(focus_enemy)
+	if index < 0 or index >= origins.size():
+		index = 0
+	return origins[index]
+
+
+func _player_origin() -> Vector2:
+	var origins := _field_origins(PLAYER_FIELD_CENTER, 1)
+	if origins.is_empty():
+		return Vector2(size.x * PLAYER_FIELD_CENTER.x, size.y * PLAYER_FIELD_CENTER.y)
+	return origins[0]
+
+
+func _on_resized() -> void:
+	_layout_hud()
+	if _qte_track != null:
+		_set_qte_progress(_qte_progress())
+	queue_redraw()
+
+
+# --------------------------------------------------------------------------
+# 战斗装配
+# --------------------------------------------------------------------------
 
 
 func _load_encounter_context() -> void:
@@ -449,6 +1044,7 @@ func _get_scene_flow() -> Node:
 
 func _setup_battle() -> void:
 	engine = BattleEngineScript.new()
+	_character_visuals.clear()
 	var player_class := _create_player_class()
 	var enemy_class := _create_enemy_class()
 	var player_name := str(encounter_data.get("player_name", "剑修"))
@@ -480,6 +1076,7 @@ func _setup_battle() -> void:
 	)
 	player_unit = engine.player_units[0]
 	enemy_unit = engine.enemy_units[0]
+	focus_enemy = enemy_unit
 	engine.start()
 
 
@@ -493,36 +1090,106 @@ func _create_enemy_class() -> CharacterClass:
 	return TrainingDummyScript.new()
 
 
+# --------------------------------------------------------------------------
+# 界面刷新
+# --------------------------------------------------------------------------
+
+
 func _refresh_ui() -> void:
 	if player_unit == null or enemy_unit == null or engine == null:
 		return
 
-	_player_status.text = _format_status(player_unit)
-	_enemy_status.text = _format_status(enemy_unit)
+	_update_focus_enemy()
+
 	_turn_label.text = _turn_text()
+	_battle_progress_label.text = "BATTLE %d/%d" % [
+		int(encounter_data.get("battle_index", 1)),
+		int(encounter_data.get("battle_total", 1)),
+	]
+	_state_label.text = _state_text()
+	_apply_state_chip_style()
+
+	var focus := _focus_unit()
+	if focus != null:
+		_enemy_name_label.text = focus.unit_name
+		_enemy_hp_value_label.text = "%d / %d" % [focus.hp, focus.max_hp]
+	_enemy_battle_label.text = _format_battle_label(focus)
 	_player_battle_label.text = _format_battle_label(player_unit)
-	_enemy_battle_label.text = _format_battle_label(enemy_unit)
 	_layout_battle_labels()
-	_end_turn_button.disabled = engine.current_state != BattleEngineScript.State.PLAYER_TURN
+
+	_end_turn_button.disabled = (
+		engine.current_state != BattleEngineScript.State.PLAYER_TURN
+	)
+	_update_party_strip()
 	_refresh_action_menu()
+	_layout_hud()
 	queue_redraw()
 
 
-func _refresh_action_menu() -> void:
-	for child in _action_grid.get_children():
-		_action_grid.remove_child(child)
-		child.queue_free()
+func _update_focus_enemy() -> void:
+	focus_enemy = null
+	if engine == null:
+		return
+	for unit in engine.enemy_units:
+		if unit.hp > 0:
+			focus_enemy = unit
+			break
+	if focus_enemy == null and not engine.enemy_units.is_empty():
+		focus_enemy = engine.enemy_units[0]
 
-	var is_player_turn := engine.current_state == BattleEngineScript.State.PLAYER_TURN
+
+func _focus_unit() -> BattleUnit:
+	return focus_enemy if focus_enemy != null else enemy_unit
+
+
+func _apply_state_chip_style() -> void:
+	if _state_chip == null:
+		return
+	var accent := PLAYER_ACCENT
+	match engine.current_state:
+		BattleEngineScript.State.ENEMY_TURN:
+			accent = ENEMY_ACCENT
+		BattleEngineScript.State.QTE, BattleEngineScript.State.BATTLE_END:
+			accent = GOLD_ACCENT
+		BattleEngineScript.State.RESOLVING, BattleEngineScript.State.TURN_END:
+			accent = Color(0.62, 0.7, 0.76)
+		_:
+			accent = PLAYER_ACCENT
+	_state_chip.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			Color(accent.r * 0.2, accent.g * 0.2, accent.b * 0.2, 0.92),
+			Color(accent.r, accent.g, accent.b, 0.75),
+			3
+		)
+	)
+	_state_label.add_theme_color_override("font_color", accent.lightened(0.3))
+
+
+func _refresh_action_menu() -> void:
+	for child in _action_list.get_children():
+		_action_list.remove_child(child)
+		child.queue_free()
+	_action_shortcuts.clear()
+
+	var is_player_turn := _is_player_turn()
 	var actor := engine.active_actor if is_player_turn else null
 	if not is_player_turn or actor == null:
-		_action_title.text = "等待行动"
+		_action_title.text = "等待"
+		_action_subtitle.text = "敌方行动中"
 		var waiting := Label.new()
 		waiting.text = "当前不是玩家回合"
-		waiting.add_theme_color_override("font_color", Color(0.6, 0.7, 0.78))
+		waiting.add_theme_color_override("font_color", TEXT_MUTED)
 		waiting.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_action_grid.add_child(waiting)
+		_action_list.add_child(waiting)
 		return
+
+	_action_subtitle.text = "%s  ·  %s %d / %d" % [
+		actor.unit_name,
+		BattleAttribute.label(BattleAttribute.Type.AT),
+		actor.at,
+		actor.max_at,
+	]
 
 	match current_view:
 		View.SKILLS:
@@ -547,6 +1214,14 @@ func _add_main_buttons(actor: BattleUnit) -> void:
 	var ultimate_command := actor.battle_class.build_ultimate_command()
 
 	_add_action_button(
+		"攻击",
+		func() -> void: _submit_command(
+			attack_command.id if attack_command != null else &""
+		),
+		_command_tooltip(actor, attack_command),
+		_is_command_available_for_actor(actor, attack_command)
+	)
+	_add_action_button(
 		"技能",
 		func() -> void: _set_view(View.SKILLS),
 		"" if not skill_commands.is_empty() else "当前没有可用技能",
@@ -557,12 +1232,6 @@ func _add_main_buttons(actor: BattleUnit) -> void:
 		func() -> void: _set_view(View.CLASS_SPECIAL),
 		"" if not special_commands.is_empty() else "当前没有职业特殊行动",
 		not special_commands.is_empty()
-	)
-	_add_action_button(
-		"攻击",
-		func() -> void: _submit_command(attack_command.id if attack_command != null else &""),
-		_command_tooltip(actor, attack_command),
-		_is_command_available_for_actor(actor, attack_command)
 	)
 	if ultimate_command != null:
 		_add_action_button(
@@ -601,15 +1270,167 @@ func _add_action_button(
 	tooltip: String,
 	available: bool = true
 ) -> void:
+	var shortcut := _action_list.get_child_count() + 1
 	var button := Button.new()
-	button.text = text
+	button.text = "%d  %s" % [shortcut, text]
 	button.tooltip_text = tooltip
 	button.disabled = not available
-	button.custom_minimum_size = Vector2(0.0, 40.0)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(0.0, _s(50.0))
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(action)
 	_style_button(button, PLAYER_ACCENT)
-	_action_grid.add_child(button)
+	_action_list.add_child(button)
+	_action_shortcuts.append(action if available else Callable())
+
+
+func _update_party_strip() -> void:
+	if _party_strip == null:
+		return
+	for child in _party_strip.get_children():
+		_party_strip.remove_child(child)
+		child.queue_free()
+
+	var units := _field_players()
+	for index in range(PARTY_SLOT_COUNT):
+		if index < units.size():
+			var unit := units[index]
+			var active := engine != null and engine.active_actor == unit
+			_party_strip.add_child(_make_party_card(unit, active))
+		else:
+			_party_strip.add_child(_make_empty_card())
+
+
+func _make_party_card(unit: BattleUnit, active: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = _sv(PARTY_CARD_SIZE)
+	card.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			Color(0.03, 0.055, 0.08, 0.92) if active
+				else Color(0.025, 0.04, 0.055, 0.82),
+			PLAYER_ACCENT if active else Color(0.36, 0.44, 0.5, 0.55),
+			6
+		)
+	)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	card.add_child(row)
+
+	var portrait := PanelContainer.new()
+	portrait.custom_minimum_size = _sv(Vector2(62.0, 72.0))
+	portrait.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			PLAYER_ACCENT.darkened(0.62),
+			Color(PLAYER_ACCENT.r, PLAYER_ACCENT.g, PLAYER_ACCENT.b, 0.7),
+			4
+		)
+	)
+	row.add_child(portrait)
+
+	var portrait_label := Label.new()
+	portrait_label.text = unit.unit_name.substr(0, 1)
+	portrait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	portrait_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	portrait_label.add_theme_font_size_override("font_size", _fs(30))
+	portrait_label.add_theme_color_override(
+		"font_color",
+		Color(0.92, 0.97, 1.0, 0.92)
+	)
+	portrait.add_child(portrait_label)
+
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 5)
+	row.add_child(info)
+
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 6)
+	info.add_child(name_row)
+
+	var name_label := Label.new()
+	name_label.text = unit.unit_name
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.add_theme_font_size_override("font_size", _fs(16))
+	name_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	name_row.add_child(name_label)
+
+	var tag := Label.new()
+	tag.text = "行动中" if active else "待命"
+	tag.add_theme_font_size_override("font_size", _fs(12))
+	tag.add_theme_color_override(
+		"font_color",
+		PLAYER_ACCENT if active else TEXT_MUTED
+	)
+	name_row.add_child(tag)
+
+	var hp := ProgressBar.new()
+	hp.min_value = 0.0
+	hp.max_value = 1.0
+	hp.value = unit.hp_ratio()
+	hp.show_percentage = false
+	hp.custom_minimum_size = Vector2(0.0, _s(13.0))
+	hp.add_theme_stylebox_override(
+		"background",
+		_flat_style(Color(0.02, 0.03, 0.04, 0.92), Color(0.24, 0.32, 0.36, 0.55), 2)
+	)
+	var hp_color := _health_color(unit.hp_ratio())
+	hp.add_theme_stylebox_override(
+		"fill",
+		_flat_style(hp_color, hp_color.lightened(0.25), 2)
+	)
+	info.add_child(hp)
+
+	var stat_row := HBoxContainer.new()
+	stat_row.add_theme_constant_override("separation", 8)
+	info.add_child(stat_row)
+
+	var hp_text := Label.new()
+	hp_text.text = "%d / %d" % [unit.hp, unit.max_hp]
+	hp_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hp_text.add_theme_font_size_override("font_size", _fs(12))
+	hp_text.add_theme_color_override("font_color", Color(0.82, 0.88, 0.92))
+	stat_row.add_child(hp_text)
+
+	var ap_text := Label.new()
+	ap_text.text = "%s %d / %d" % [
+		BattleAttribute.label(BattleAttribute.Type.AP),
+		unit.ap,
+		unit.max_ap,
+	]
+	ap_text.add_theme_font_size_override("font_size", _fs(12))
+	ap_text.add_theme_color_override("font_color", PLAYER_ACCENT)
+	stat_row.add_child(ap_text)
+
+	return card
+
+
+func _make_empty_card() -> PanelContainer:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = _sv(PARTY_CARD_SIZE)
+	card.add_theme_stylebox_override(
+		"panel",
+		_flat_style(
+			Color(0.02, 0.03, 0.04, 0.5),
+			Color(0.26, 0.32, 0.36, 0.45),
+			6
+		)
+	)
+	var label := Label.new()
+	label.text = "空位"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", _fs(15))
+	label.add_theme_color_override("font_color", Color(0.45, 0.52, 0.56))
+	card.add_child(label)
+	return card
+
+
+# --------------------------------------------------------------------------
+# 交互
+# --------------------------------------------------------------------------
 
 
 func _set_view(view: int) -> void:
@@ -681,6 +1502,7 @@ func _refresh_result_panel() -> void:
 	var can_return := scene_flow != null and bool(scene_flow.has_battle_return())
 	_return_scene_button.visible = can_return
 	_result_hint.text = "选择返回场景或重新开始" if can_return else "点击重新开始再战"
+	_dim_overlay.visible = true
 	_result_panel.visible = true
 	_refresh_ui()
 
@@ -690,21 +1512,38 @@ func _on_log_emitted(text: String) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not _qte_active or _qte_task == null:
-		return
-	if (
-		event is InputEventMouseButton
-		and event.pressed
-		and event.button_index == MOUSE_BUTTON_LEFT
-	):
-		_finish_qte(_qte_task.evaluate(_qte_progress()))
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey:
-		var key_event := event as InputEventKey
-		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_SPACE:
+	if _qte_active and _qte_task != null:
+		if (
+			event is InputEventMouseButton
+			and event.pressed
+			and event.button_index == MOUSE_BUTTON_LEFT
+		):
 			_finish_qte(_qte_task.evaluate(_qte_progress()))
 			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventKey:
+			var qte_key := event as InputEventKey
+			if qte_key.pressed and not qte_key.echo and qte_key.keycode == KEY_SPACE:
+				_finish_qte(_qte_task.evaluate(_qte_progress()))
+				get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo:
+			return
+		var index := int(key_event.keycode) - int(KEY_1)
+		if index < 0 or index >= _action_shortcuts.size():
+			return
+		var shortcut := _action_shortcuts[index]
+		if shortcut.is_valid():
+			shortcut.call()
+			get_viewport().set_input_as_handled()
+
+
+# --------------------------------------------------------------------------
+# QTE
+# --------------------------------------------------------------------------
 
 
 func _on_qte_started(task: BattleQTE) -> void:
@@ -717,7 +1556,7 @@ func _on_qte_started(task: BattleQTE) -> void:
 	_qte_instruction.text = task.get_instruction()
 	_qte_input_hint.text = task.get_input_hint()
 	_qte_result.text = "等待判定"
-	_qte_result.add_theme_color_override("font_color", Color(0.7, 0.78, 0.84))
+	_qte_result.add_theme_color_override("font_color", Color(0.72, 0.8, 0.86))
 	_apply_qte_zones(task)
 	_set_qte_progress(0.0)
 
@@ -774,38 +1613,35 @@ func _set_qte_progress(progress: float) -> void:
 	)
 
 
-func _format_status(unit: BattleUnit) -> String:
-	var text := "%s %d/%d    %s %d/%d    %s %d/%d    %s %d" % [
-		BattleAttribute.label(BattleAttribute.Type.HP),
-		unit.hp,
-		unit.max_hp,
-		BattleAttribute.label(BattleAttribute.Type.AP),
-		unit.ap,
-		unit.max_ap,
-		BattleAttribute.label(BattleAttribute.Type.AT),
-		unit.at,
-		unit.max_at,
-		BattleAttribute.label(BattleAttribute.Type.ATTACK),
-		unit.attack,
-	]
-	for line in unit.battle_class.get_status_lines():
-		text += "\n" + line
-	return text
+# --------------------------------------------------------------------------
+# 文案
+# --------------------------------------------------------------------------
 
 
 func _format_battle_label(unit: BattleUnit) -> String:
-	return "%s\nHP %d / %d" % [unit.unit_name, unit.hp, unit.max_hp]
+	if unit == null:
+		return ""
+	return "%s\n%s %d / %d" % [
+		unit.unit_name,
+		BattleAttribute.label(BattleAttribute.Type.HP),
+		unit.hp,
+		unit.max_hp,
+	]
 
 
 func _turn_text() -> String:
-	var state_name := ""
+	return "第 %d 回合" % engine.round_number
+
+
+func _state_text() -> String:
+	var state_name := "准备"
 	match engine.current_state:
 		BattleEngineScript.State.PLAYER_TURN:
 			state_name = "玩家回合"
 		BattleEngineScript.State.ENEMY_TURN:
 			state_name = "敌方回合"
 		BattleEngineScript.State.QTE:
-			state_name = "QTE判定"
+			state_name = "判定中"
 		BattleEngineScript.State.RESOLVING:
 			state_name = "行动结算"
 		BattleEngineScript.State.TURN_START:
@@ -816,7 +1652,14 @@ func _turn_text() -> String:
 			state_name = "战斗结束"
 		_:
 			state_name = "战斗准备"
-	return "第 %d 回合  |  %s" % [engine.round_number, state_name]
+	return state_name
+
+
+func _is_player_turn() -> bool:
+	return (
+		engine != null
+		and engine.current_state == BattleEngineScript.State.PLAYER_TURN
+	)
 
 
 func _command_tooltip(actor: BattleUnit, command: BattleCommand) -> String:
@@ -842,110 +1685,24 @@ func _is_command_available_for_actor(actor: BattleUnit, command: BattleCommand) 
 	return true
 
 
-func _on_resized() -> void:
-	if _qte_track != null:
-		_set_qte_progress(_qte_progress())
-	_layout_battle_labels()
-	queue_redraw()
+# --------------------------------------------------------------------------
+# 样式工具
+# --------------------------------------------------------------------------
 
 
-func _layout_battle_labels() -> void:
-	if _player_battle_label == null or _enemy_battle_label == null:
-		return
-	_player_battle_label.position = _player_origin() + Vector2(-110.0, 82.0)
-	_enemy_battle_label.position = _enemy_origin() + Vector2(-110.0, 82.0)
+## HUD 尺寸缩放。
+func _s(value: float) -> float:
+	return value * UI_SCALE
 
 
-func _player_origin() -> Vector2:
-	return Vector2(size.x * 0.27, size.y * 0.67)
+## HUD 尺寸缩放（向量）。
+func _sv(value: Vector2) -> Vector2:
+	return value * UI_SCALE
 
 
-func _enemy_origin() -> Vector2:
-	return Vector2(size.x * 0.73, size.y * 0.67)
-
-
-func _draw_unit(origin: Vector2, accent: Color, is_player: bool) -> void:
-	var unit := player_unit if is_player else enemy_unit
-	if unit == null:
-		return
-	var alive := unit.hp > 0
-	var active := engine != null and engine.active_actor == unit
-	var shadow := Color(0.0, 0.0, 0.0, 0.36)
-	var skin := Color(0.88, 0.72, 0.58)
-	var cloth := accent.darkened(0.28)
-	var metal := Color(0.76, 0.84, 0.9)
-
-	draw_circle(origin + Vector2(0.0, 36.0), 48.0, shadow)
-	if active and alive:
-		draw_arc(origin + Vector2(0.0, 36.0), 54.0, 0.0, TAU, 48, accent, 3.0)
-
-	if not alive:
-		draw_rect(Rect2(origin + Vector2(-62.0, 12.0), Vector2(124.0, 24.0)), cloth)
-		draw_rect(
-			Rect2(origin + Vector2(-18.0, 11.0), Vector2(36.0, 26.0)),
-			Color(0.42, 0.46, 0.5)
-		)
-		_draw_health_bar(origin, unit, accent)
-		return
-
-	draw_circle(origin + Vector2(-18.0, -30.0), 22.0, skin)
-	draw_rect(
-		Rect2(origin + Vector2(-30.0, -8.0), Vector2(60.0, 80.0)),
-		cloth
-	)
-	draw_rect(
-		Rect2(origin + Vector2(-38.0, 0.0), Vector2(20.0, 58.0)),
-		accent.darkened(0.12)
-	)
-	draw_rect(
-		Rect2(origin + Vector2(18.0, 0.0), Vector2(20.0, 58.0)),
-		accent.darkened(0.12)
-	)
-	draw_rect(
-		Rect2(origin + Vector2(-28.0, 68.0), Vector2(22.0, 42.0)),
-		Color(0.12, 0.16, 0.2)
-	)
-	draw_rect(
-		Rect2(origin + Vector2(6.0, 68.0), Vector2(22.0, 42.0)),
-		Color(0.12, 0.16, 0.2)
-	)
-
-	if is_player:
-		draw_line(
-			origin + Vector2(28.0, 4.0),
-			origin + Vector2(76.0, -70.0),
-			metal,
-			5.0
-		)
-		draw_line(
-			origin + Vector2(22.0, 12.0),
-			origin + Vector2(46.0, 2.0),
-			Color(0.92, 0.68, 0.24),
-			5.0
-		)
-	else:
-		draw_line(
-			origin + Vector2(28.0, 4.0),
-			origin + Vector2(58.0, -76.0),
-			Color(0.46, 0.38, 0.32),
-			6.0
-		)
-		draw_circle(origin + Vector2(60.0, -78.0), 10.0, accent)
-
-	_draw_health_bar(origin, unit, accent)
-
-
-func _draw_health_bar(origin: Vector2, unit: BattleUnit, accent: Color) -> void:
-	var width := 132.0
-	var height := 12.0
-	var top_left := origin + Vector2(-width * 0.5, 54.0)
-	var ratio := clampf(unit.hp_ratio(), 0.0, 1.0)
-	draw_rect(Rect2(top_left, Vector2(width, height)), Color(0.02, 0.03, 0.04, 0.92))
-	draw_rect(
-		Rect2(top_left + Vector2(2.0, 2.0), Vector2((width - 4.0) * ratio, height - 4.0)),
-		_health_color(ratio)
-	)
-	draw_rect(Rect2(top_left, Vector2(width, height)), accent, false, 1.0)
+## 字号缩放，保证缩小后仍不小于 10px。
+func _fs(base: float) -> int:
+	return maxi(10, int(round(base * UI_SCALE)))
 
 
 func _health_color(ratio: float) -> Color:
@@ -972,14 +1729,14 @@ func _ellipse_points(
 
 func _panel_style(accent: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.055, 0.075, 0.94)
-	style.border_color = Color(accent.r, accent.g, accent.b, 0.72)
+	style.bg_color = PLATE_FILL_SOFT
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.6)
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(8)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 10.0
-	style.content_margin_bottom = 10.0
+	style.set_corner_radius_all(maxi(2, int(round(6.0 * UI_SCALE))))
+	style.content_margin_left = _s(14.0)
+	style.content_margin_right = _s(14.0)
+	style.content_margin_top = _s(12.0)
+	style.content_margin_bottom = _s(12.0)
 	return style
 
 
@@ -992,30 +1749,69 @@ func _flat_style(
 	style.bg_color = color
 	style.border_color = border_color
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = 8.0
-	style.content_margin_right = 8.0
-	style.content_margin_top = 6.0
-	style.content_margin_bottom = 6.0
+	style.set_corner_radius_all(maxi(2, int(round(float(radius) * UI_SCALE))))
+	style.content_margin_left = _s(8.0)
+	style.content_margin_right = _s(8.0)
+	style.content_margin_top = _s(5.0)
+	style.content_margin_bottom = _s(5.0)
+	return style
+
+
+func _command_style(
+	color: Color,
+	accent: Color,
+	border_alpha: float
+) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.border_color = Color(accent.r, accent.g, accent.b, border_alpha)
+	style.border_width_left = maxi(2, int(round(4.0 * UI_SCALE)))
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.set_corner_radius_all(maxi(2, int(round(4.0 * UI_SCALE))))
+	style.content_margin_left = _s(14.0)
+	style.content_margin_right = _s(12.0)
+	style.content_margin_top = _s(8.0)
+	style.content_margin_bottom = _s(8.0)
 	return style
 
 
 func _style_button(button: Button, accent: Color) -> void:
 	button.add_theme_stylebox_override(
 		"normal",
-		_flat_style(Color(0.045, 0.075, 0.1, 0.98), accent.darkened(0.18), 7)
+		_command_style(
+			Color(accent.r * 0.16, accent.g * 0.16, accent.b * 0.2, 0.95),
+			accent,
+			0.55
+		)
 	)
 	button.add_theme_stylebox_override(
 		"hover",
-		_flat_style(Color(0.08, 0.14, 0.18, 1.0), accent.lightened(0.08), 7)
+		_command_style(
+			Color(accent.r * 0.32, accent.g * 0.32, accent.b * 0.36, 0.98),
+			accent,
+			0.9
+		)
 	)
 	button.add_theme_stylebox_override(
 		"pressed",
-		_flat_style(Color(0.12, 0.22, 0.28, 1.0), accent.lightened(0.18), 7)
+		_command_style(
+			Color(accent.r * 0.46, accent.g * 0.46, accent.b * 0.52, 1.0),
+			accent.lightened(0.15),
+			1.0
+		)
 	)
 	button.add_theme_stylebox_override(
 		"disabled",
-		_flat_style(Color(0.04, 0.05, 0.06, 0.9), Color(0.22, 0.25, 0.28), 7)
+		_command_style(
+			Color(0.06, 0.07, 0.09, 0.8),
+			Color(0.3, 0.34, 0.38, 0.5),
+			0.4
+		)
 	)
-	button.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0))
-	button.add_theme_color_override("font_disabled_color", Color(0.42, 0.46, 0.5))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	button.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_disabled_color", Color(0.44, 0.48, 0.52))
+	button.add_theme_font_size_override("font_size", _fs(16))

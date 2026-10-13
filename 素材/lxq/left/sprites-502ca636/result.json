@@ -1,0 +1,21 @@
+{
+  "stage": "sprites",
+  "assets": [
+    {
+      "id": "502ca636a70940b8a93bdcbf7dac5b07",
+      "path": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\sprites.png",
+      "kind": "sprites",
+      "run_directory": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6",
+      "gif": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\animation.gif",
+      "frames": 42,
+      "cell_size": [
+        384,
+        512
+      ],
+      "metadata": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\sprite_metadata.json",
+      "resource": "D:\\codex\\character-studio\\data\\projects\\20261013-043535-bfe704\\runs\\20261013-050001-sprites-1aefc6\\animation.tres",
+      "animation_fps": 24.0,
+      "animation_name": "walk_left"
+    }
+  ]
+}

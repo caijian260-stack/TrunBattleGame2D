@@ -7,6 +7,13 @@ const BattleQTEScript := preload("res://scripts/core/battle_qte.gd")
 const CharacterClassScript := preload("res://scripts/classes/character_class.gd")
 const SwordCultivatorScript := preload("res://scripts/classes/sword_cultivator.gd")
 const TrainingDummyScript := preload("res://scripts/classes/training_dummy.gd")
+const BattleUnitScript := preload("res://scripts/core/battle_unit.gd")
+const BattleCharacter2DScript := preload(
+	"res://scripts/ui/battle_character_2d.gd"
+)
+const PlayerBattleCharacter2DScript := preload(
+	"res://scripts/ui/player_battle_character_2d.gd"
+)
 
 var failures := 0
 
@@ -16,6 +23,7 @@ func _init() -> void:
 
 
 func _run() -> void:
+	_test_character_idle_animation()
 	_test_player_and_enemy_turn()
 	_test_zero_action_points_blocks_action_commands()
 	_test_domain_and_special_menu()
@@ -32,6 +40,39 @@ func _run() -> void:
 	else:
 		print("BATTLE TESTS FAILED: %d" % failures)
 		quit(1)
+
+
+func _test_character_idle_animation() -> void:
+	var unit := BattleUnitScript.new()
+	unit.unit_name = "动画测试角色"
+	unit.max_hp = 10
+	unit.hp = 10
+
+	var character := PlayerBattleCharacter2DScript.new()
+	character.setup(unit, Color(0.24, 0.75, 0.98), true)
+	var initial_time: float = character.animation_time
+
+	character.update(0.25)
+	_check(
+		character.animation_state == BattleCharacter2DScript.AnimationState.IDLE,
+		"存活角色应保持待机动画状态"
+	)
+	_check(character.animation_time > initial_time, "待机动画时间应逐帧推进")
+
+	unit.hp = 0
+	character.update(0.1)
+	_check(
+		character.animation_state
+		== BattleCharacter2DScript.AnimationState.DEFEATED,
+		"角色死亡后应切换到死亡表现状态"
+	)
+
+	unit.hp = 1
+	character.update(0.1)
+	_check(
+		character.animation_state == BattleCharacter2DScript.AnimationState.IDLE,
+		"角色恢复存活后应重新进入待机动画"
+	)
 
 
 func _make_engine() -> Dictionary:

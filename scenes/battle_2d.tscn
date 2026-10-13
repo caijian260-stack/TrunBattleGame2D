@@ -1,8 +1,11 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b2yw5a7es4s0o"]
 
-[ext_resource type="Script" path="res://scripts/ui/battle_2d_scene.gd" id="1"]
+[ext_resource type="Script" uid="uid://dtb8rihxxnirf" path="res://scripts/ui/battle_2d_scene.gd" id="1"]
 
-[node name="Battle2DScene" type="Control"]
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_81el3"]
+load_path = "res://.godot/imported/scene01_1680_1080.png-93376e04d5dd732a05da3f1483c3515a.ctex"
+
+[node name="Battle2DScene" type="Control" unique_id=1132177535]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -10,3 +13,4 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
+background_texture = SubResource("CompressedTexture2D_81el3")
